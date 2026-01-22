@@ -1,0 +1,29 @@
+# Dependencies - always exclude
+node_modules/
+
+# Build outputs - dist/ is bundled, but out/ contains TypeScript output needed for vsce
+dist/
+
+# Test files - exclude from package
+test/
+*.test.ts
+*.test.tsx
+jest.config.js
+
+# Development files
+.vscode/
+.gitignore
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.temp
+nul
+
+# Exclude pack.bat from package (not needed in production)
+pack.bat

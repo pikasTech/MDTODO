@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MDTODO 任务管理</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    #loading {
+      padding: 20px;
+      color: #888;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="loading">正在加载...</div>
+  </div>
+
+  <!-- React from CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Debug: Show loading state until React takes over -->
+  <script>
+    console.log('[Webview HTML] Template loaded');
+    window.webviewReady = false;
+    // Remove loading message when React takes over
+    const originalCreateRoot = window.createRoot;
+    window.createRoot = function(container) {
+      const loading = document.getElementById('loading');
+      if (loading) loading.remove();
+      window.webviewReady = true;
+      console.log('[Webview HTML] React taking over');
+      return originalCreateRoot.apply(this, arguments);
+    };
+  </script>
+
+  <!-- Bundled React app -->
+  <script src="{{BUNDLE_JS_URI}}"></script>
+
+  <!-- Fallback: Remove loading message even if React fails -->
+  <script>
+    setTimeout(() => {
+      const loading = document.getElementById('loading');
+      if (loading && !window.webviewReady) {
+        console.log('[Webview HTML] React did not take over, removing loading');
+        loading.innerHTML = 'React 加载失败，请检查控制台';
+      }
+    }, 2000);
+  </script>
+</body>
+</html>

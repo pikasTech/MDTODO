@@ -1,0 +1,111 @@
+{
+  "name": "vscode-mdtodo",
+  "displayName": "MDTODO",
+  "description": "VSCODE插件，渲染TODO文件为独立视图窗口，支持Claude Code集成",
+  "version": "0.0.2",
+  "publisher": "mdtodo",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:mdtodo.openView",
+    "onCommand:mdtodo.openFromPreview"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mdtodo.openView",
+        "title": "MDTODO",
+        "enablement": "true"
+      },
+      {
+        "command": "mdtodo.openFile",
+        "title": "打开TODO文件",
+        "enablement": "true"
+      },
+      {
+        "command": "mdtodo.refresh",
+        "title": "刷新任务列表",
+        "enablement": "true"
+      },
+      {
+        "command": "mdtodo.executeTask",
+        "title": "使用Claude执行任务",
+        "enablement": "true"
+      },
+      {
+        "command": "mdtodo.openFromPreview",
+        "title": "MDTODO",
+        "enablement": "resourceLangId == markdown"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "mdtodo.openView",
+          "when": "true",
+          "group": "navigation"
+        },
+        {
+          "command": "mdtodo.openFile",
+          "when": "true",
+          "group": "navigation"
+        },
+        {
+          "command": "mdtodo.openFromPreview",
+          "when": "editorLangId == markdown",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "mdtodo.openFromPreview",
+          "when": "resourceLangId == markdown",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MDTODO",
+      "properties": {
+        "mdtodo.autoOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "自动打开MDTODO独立视图"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc && webpack",
+    "watch": "webpack --watch",
+    "prepack": "npm run compile",
+    "package": "vsce package",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/marked": "^5.0.2",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/vscode": "^1.70.0",
+    "css-loader": "^7.0.0",
+    "jest": "^30.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "style-loader": "^4.0.0",
+    "ts-jest": "^29.4.6",
+    "ts-loader": "^9.0.0",
+    "typescript": "^5.0.0",
+    "webpack": "^5.0.0",
+    "webpack-cli": "^5.0.0"
+  },
+  "dependencies": {
+    "marked": "^17.0.1"
+  }
+}

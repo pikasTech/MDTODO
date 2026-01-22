@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2015",
+    "lib": ["DOM", "DOM.Iterable", "ES2015"],
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "jsx": "react",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowSyntheticDefaultImports": true,
+    "noEmit": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/webview/**/*"],
+  "exclude": ["node_modules"]
+}
