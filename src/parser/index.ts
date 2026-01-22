@@ -157,9 +157,11 @@ export class TodoParser {
       if (isHeading && hasRxx) {
         // 如果在此之前已经在收集文本块，保存它
         if (inTextBlock && currentBlockLines.length > 0) {
+          // 【R13.5】保存原始内容用于编辑
           textBlocks.push({
             id: `text-${blockStartLine}`,
             content: currentBlockLines.join('\n').trim(),
+            rawContent: currentBlockLines.join('\n'),  // 保留原始换行和格式
             lineNumber: blockStartLine
           });
         }
@@ -196,9 +198,11 @@ export class TodoParser {
 
     // 处理最后一个文本块（如果不在代码块内且有内容）
     if (!inCodeBlock && inTextBlock && currentBlockLines.length > 0) {
+      // 【R13.5】保存原始内容用于编辑
       textBlocks.push({
         id: `text-${blockStartLine}`,
         content: currentBlockLines.join('\n').trim(),
+        rawContent: currentBlockLines.join('\n'),  // 保留原始换行和格式
         lineNumber: blockStartLine
       });
     }
@@ -312,14 +316,20 @@ export class TodoParser {
     const linkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
     let match;
 
+    // 【R39 调试日志】生产环境应注释掉
+    // console.log('[R39 Debug] extractLinks: content length =', content.length);
+    // console.log('[R39 Debug] extractLinks: content =', content.substring(0, 200));
+
     while ((match = linkRegex.exec(content)) !== null) {
       const url = match[2].trim();
+      // console.log('[R39 Debug] extractLinks: found link =', url);
       // 排除锚点链接（以 # 开头）和 mailto 链接
       if (url && !url.startsWith('#') && !url.startsWith('mailto:')) {
         links.push(url);
       }
     }
 
+    // console.log('[R39 Debug] extractLinks: total links found =', links.length);
     return links;
   }
 
@@ -368,16 +378,24 @@ export class TodoParser {
     const links = this.extractLinks(content);
     let existsCount = 0;
 
+    // 【R39 调试日志】生产环境应注释掉
+    // console.log('[R39 Debug] calculateLinkStats: filePath =', filePath);
+    // console.log('[R39 Debug] calculateLinkStats: links to check =', links);
+
     for (const link of links) {
-      if (this.checkLinkExists(link, filePath)) {
+      const exists = this.checkLinkExists(link, filePath);
+      // console.log('[R39 Debug] calculateLinkStats: link =', link, ', exists =', exists);
+      if (exists) {
         existsCount++;
       }
     }
 
-    return {
+    const result = {
       linkCount: links.length,
       linkExists: existsCount
     };
+    // console.log('[R39 Debug] calculateLinkStats: result =', result);
+    return result;
   }
 
   async parseFile(uri: vscode.Uri): Promise<TodoFile> {

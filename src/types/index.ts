@@ -16,7 +16,8 @@ export interface TodoTask {
 
 export interface TextBlock {
   id: string;           // 文本块唯一标识
-  content: string;      // 文本块内容
+  content: string;      // 文本块内容（用于显示，经过格式化处理）
+  rawContent: string;   // 原始内容（用于编辑，保留所有格式）
   lineNumber: number;   // 在文件中的行号
 }
 

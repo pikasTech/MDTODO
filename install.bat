@@ -75,4 +75,4 @@ echo   3. Type "MDTODO: Open" to launch the plugin
 echo.
 
 endlocal
-pause
+

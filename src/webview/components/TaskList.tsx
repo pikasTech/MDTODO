@@ -22,6 +22,7 @@ const BUTTON_IDS = {
   ADD_TASK: 'addTask',
   DELETE_TASK: 'deleteTask',
   ADD_SUB_TASK: 'addSubTask',
+  CONTINUE_TASK: 'continueTask',  // 【实现R46】延续按钮
   SCROLL_TO_TOP: 'scrollToTop',
   SCROLL_TO_BOTTOM: 'scrollToBottom',
   JUMP_TO_NEXT: 'jumpToNext',
@@ -48,6 +49,7 @@ interface FilterType {
 interface TextBlock {
   id: string;
   content: string;
+  rawContent: string;  // 【R13.5】原始内容用于编辑
   lineNumber: number;
 }
 
@@ -76,9 +78,9 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   // 使用 ref 跟踪 editingTaskIds 的当前值，避免 useEffect 闭包问题
   const editingTaskIdsRef = React.useRef(editingTaskIds);
   editingTaskIdsRef.current = editingTaskIds;
-  // Claude执行按钮防抖状态
+  // Claude执行按钮防抖状态 - 【实现R38.2】使用1秒独立防抖，避免误触
   const [claudeExecuting, setClaudeExecuting] = React.useState<Record<string, boolean>>({});
-  const CLAUDE_EXECUTE_COOLDOWN = 100; // 0.1秒冷却
+  const CLAUDE_EXECUTE_COOLDOWN = 1000; // 1秒冷却
   // 通用按钮防抖状态 - 【修复R38.1】改为每个按钮独立防抖
   const [buttonCooldown, setButtonCooldown] = React.useState<Record<string, boolean>>({});
   const BUTTON_COOLDOWN = 100; // 0.1秒冷却
@@ -98,6 +100,9 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const [syncScrollEnabled, setSyncScrollEnabled] = React.useState(false);
   // 【实现R37.3】跳转到下一个未完成任务的当前位置记录
   const [lastJumpIndex, setLastJumpIndex] = React.useState(-1);
+
+  // 【R13.5】普通文本块编辑状态
+  const [textBlockEditModes, setTextBlockEditModes] = React.useState<Record<string, boolean>>({});
 
   // 【实现R37.3】滚动到顶部
   const getFileName = (path: string): string => {
@@ -422,6 +427,34 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     sendMessage({ type: 'saveTitle', taskId, title });
   };
 
+  // 【R13.5】普通文本块双击进入编辑模式
+  const handleTextBlockDoubleClick = (blockId: string) => {
+    console.log('[Webview] handleTextBlockDoubleClick: 进入编辑模式', blockId);
+    // 关闭其他文本块的编辑状态，只保留当前
+    setTextBlockEditModes({
+      [blockId]: true,
+    });
+  };
+
+  // 【R13.5】保存普通文本块内容
+  const handleSaveTextBlock = (blockId: string, content: string) => {
+    console.log('[Webview] handleSaveTextBlock:', blockId, content);
+    sendMessage({ type: 'saveTextBlock', blockId, content });
+    // 退出编辑模式
+    setTextBlockEditModes((prev) => ({
+      ...prev,
+      [blockId]: false,
+    }));
+  };
+
+  // 【R13.5】取消文本块编辑
+  const handleCancelTextBlockEdit = (blockId: string) => {
+    setTextBlockEditModes((prev) => ({
+      ...prev,
+      [blockId]: false,
+    }));
+  };
+
   const handleRefresh = () => {
     // 防抖：如果冷却中，不执行
     if (buttonCooldown[BUTTON_IDS.REFRESH]) {
@@ -529,6 +562,23 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     }, BUTTON_COOLDOWN);
   };
 
+  // 【实现R46】延续任务：在最后一个子任务上添加延续按钮，创建下一个同级子任务
+  const handleContinueTask = (taskId: string) => {
+    // 防抖：如果冷却中，不执行
+    const cooldownId = `${BUTTON_IDS.CONTINUE_TASK}_${taskId}`;
+    if (buttonCooldown[cooldownId]) {
+      console.log('[Webview] 延续任务按钮防抖，跳过重复点击');
+      return;
+    }
+    console.log('[Webview] Sending continueTask, taskId:', taskId);
+    sendMessage({ type: 'continueTask', taskId });
+    // 设置防抖状态
+    setButtonCooldown(prev => ({ ...prev, [cooldownId]: true }));
+    setTimeout(() => {
+      setButtonCooldown(prev => ({ ...prev, [cooldownId]: false }));
+    }, BUTTON_COOLDOWN);
+  };
+
   // 筛选任务：支持状态筛选和关键词搜索
   // filterType: 'all' | 'active' | 'hide-completed' | 'processing'
   const filterTasks = (taskList: Task[]): Task[] => {
@@ -625,15 +675,21 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   // 处理任务内容中的链接点击
   const handleTaskContentClick = (e: React.MouseEvent, taskId: string) => {
     const target = e.target as HTMLElement;
-    // 检查是否点击了链接
-    if (target.tagName === 'A' && target instanceof HTMLAnchorElement) {
+
+    // 查找最近的链接元素（处理嵌套元素的情况）
+    const anchorElement = target.closest('a');
+
+    if (anchorElement) {
       e.preventDefault();
       e.stopPropagation(); // 阻止事件冒泡到 task-main-left，避免触发 handleSelect
-      const href = target.getAttribute('href');
+      const href = anchorElement.getAttribute('href');
       if (href) {
-        console.log('[Webview] 点击链接:', href);
+        console.log(`[Webview] 点击链接 (任务 ${taskId}):`, href);
         sendMessage({ type: 'openLink', url: href });
       }
+    } else {
+      // 如果点击的不是链接，打印调试信息
+      console.log(`[Webview] 点击非链接元素:`, target.tagName, target.textContent?.substring(0, 50));
     }
   };
 
@@ -869,11 +925,90 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     }
   };
 
-  // 渲染文本块 - 使用marked渲染markdown内容
-  const renderTextBlocks = () => {
-    if (!textBlocks || textBlocks.length === 0) return null;
+  // 【R13.5】可编辑内容块组件 - 复用任务内容块的编辑逻辑
+  const EditableContentBlock: React.FC<{
+    content: string;
+    rawContent: string;
+    isEditMode: boolean;
+    onToggleEdit: () => void;
+    onSave: (content: string) => void;
+    onCancel: () => void;
+  }> = ({ content, rawContent, isEditMode, onToggleEdit, onSave, onCancel }) => {
+    const [editValue, setEditValue] = React.useState(rawContent || content);
+    const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
-    // HTML转义函数
+    // 【修复R27/R27.1】计算textarea高度
+    const LINE_HEIGHT = 32;
+    const MIN_LINES = 3;
+    const MAX_LINES = 15;
+    const PADDING = 24;
+
+    const calculateTextareaHeight = (text: string): string => {
+      const lineCount = (text.match(/\n/g) || []).length + 1;
+      const clampedLines = Math.max(MIN_LINES, Math.min(MAX_LINES, lineCount));
+      return `${clampedLines * LINE_HEIGHT + PADDING}px`;
+    };
+
+    const [textareaHeight, setTextareaHeight] = React.useState(() =>
+      calculateTextareaHeight(rawContent || content)
+    );
+
+    // 当内容变化时，重新计算高度
+    React.useEffect(() => {
+      setTextareaHeight(calculateTextareaHeight(editValue));
+    }, [editValue]);
+
+    // 进入编辑模式时初始化内容
+    React.useEffect(() => {
+      if (isEditMode) {
+        setEditValue(rawContent || content);
+      }
+    }, [isEditMode, rawContent, content]);
+
+    // 自动聚焦
+    React.useEffect(() => {
+      if (isEditMode && textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = 0;
+        textareaRef.current.selectionEnd = 0;
+      }
+    }, [isEditMode]);
+
+    const handleBlur = () => {
+      const trimmedValue = editValue.trim();
+      if (trimmedValue) {
+        onSave(trimmedValue);
+      } else {
+        onCancel();
+      }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const trimmedValue = editValue.trim();
+        if (trimmedValue) {
+          onSave(trimmedValue);
+        }
+      }
+      if (e.key === 'Escape') {
+        onCancel();
+      }
+    };
+
+    if (isEditMode) {
+      return React.createElement('textarea', {
+        ref: textareaRef,
+        className: 'textblock-content-edit',
+        value: editValue,
+        onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setEditValue(e.target.value),
+        onBlur: handleBlur,
+        onKeyDown: handleKeyDown,
+        style: { height: textareaHeight }
+      });
+    }
+
+    // 非编辑模式：使用marked渲染
     const escapeHtml = (text: string) => {
       return text
         .replace(/&/g, '&amp;')
@@ -883,20 +1018,35 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         .replace(/'/g, '&#039;');
     };
 
+    let renderedContent;
+    try {
+      renderedContent = marked.parse(content, { async: false });
+    } catch (error) {
+      console.error('[Webview] Markdown渲染错误:', error);
+      renderedContent = escapeHtml(content);
+    }
+
+    return React.createElement('div', {
+      className: 'textblock-content',
+      dangerouslySetInnerHTML: { __html: renderedContent as string },
+      onClick: handleTextBlockClick,
+      style: { cursor: 'text' }
+    });
+  };
+
+  // 渲染文本块 - 使用可编辑内容块组件
+  const renderTextBlocks = () => {
+    if (!textBlocks || textBlocks.length === 0) return null;
+
     return React.createElement('div', { className: 'text-blocks' },
       textBlocks.map((block) => {
-        // 使用marked渲染markdown内容
-        let renderedContent;
-        try {
-          renderedContent = marked.parse(block.content, { async: false });
-        } catch (error) {
-          console.error('[Webview] TextBlock Markdown渲染错误:', error);
-          renderedContent = escapeHtml(block.content);
-        }
+        const isEditMode = textBlockEditModes[block.id] || false;
 
         return React.createElement('div', {
           key: block.id,
           className: 'text-block',
+          'data-block-id': block.id,
+          onDoubleClick: () => handleTextBlockDoubleClick(block.id),
           style: {
             padding: '8px 12px',
             margin: '4px 0',
@@ -906,10 +1056,17 @@ const TaskList: React.FC<TaskListProps> = (props) => {
             color: '#a0a0a0',
             lineHeight: '1.5',
             cursor: 'pointer'
-          },
-          dangerouslySetInnerHTML: { __html: renderedContent as string },
-          onClick: handleTextBlockClick
-        });
+          }
+        },
+          React.createElement(EditableContentBlock, {
+            content: block.content,
+            rawContent: block.rawContent,
+            isEditMode: isEditMode,
+            onToggleEdit: () => handleTextBlockDoubleClick(block.id),
+            onSave: (content: string) => handleSaveTextBlock(block.id, content),
+            onCancel: () => handleCancelTextBlockEdit(block.id)
+          })
+        );
       })
     );
   };
@@ -1152,7 +1309,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           )
         : null,
       tasks.length > 0 && filteredTasks.length > 0 && React.createElement('ul', { className: 'task-list', ref: taskListRef },
-          filteredTasks.map((task) =>
+          filteredTasks.map((task, index) =>
             React.createElement(TaskItem, {
               key: task.id,
               task,
@@ -1168,6 +1325,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
               onClaudeExecute: handleClaudeExecute,
               onDelete: handleDeleteTask,
               onAddSubTask: handleAddSubTask,
+              onContinueTask: handleContinueTask,
+              isLastChild: false,  // 顶层任务没有延续按钮
               claudeExecuting,
               onDoubleClick: handleDoubleClick,
               onSaveComplete: handleSaveComplete,
@@ -1198,6 +1357,8 @@ const TaskItem: React.FC<{
   onClaudeExecute: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onAddSubTask: (taskId: string) => void;
+  onContinueTask: (taskId: string) => void;  // 【实现R46】延续任务
+  isLastChild: boolean;  // 【实现R46】是否为最后一个子任务
   onDoubleClick: (taskId: string) => void;
   onSaveComplete?: (taskId: string) => void;  // 保存完成后退出编辑模式的回调
   onTaskContentClick?: (e: React.MouseEvent, taskId: string) => void;  // 任务内容链接点击回调
@@ -1217,6 +1378,8 @@ const TaskItem: React.FC<{
     onClaudeExecute,
     onDelete,
     onAddSubTask,
+    onContinueTask,
+    isLastChild,
     onDoubleClick,
     onSaveComplete,
     onTaskContentClick,
@@ -1252,8 +1415,9 @@ const TaskItem: React.FC<{
   const isEditMode = editModes[task.id] || false;
   // Check if this is a newly added task (empty rawContent and just entered edit mode)
   const isNewTask = (task.rawContent || task.title).trim() === '' && isEditMode;
+  // 【修复R44】增大 maxHeight 到 10000px，解决长内容子任务被截断遮盖的问题
   const childrenStyle = {
-    maxHeight: isExpanded ? '2000px' : '0',
+    maxHeight: isExpanded ? '10000px' : '0',
     marginLeft: `${24 + depth * 16}px`,
   };
 
@@ -1399,6 +1563,21 @@ const TaskItem: React.FC<{
         ),
         // 按钮区域移到任务内容下方，右对齐
         React.createElement('div', { className: 'task-actions' },
+          // 【实现R46】延续按钮：仅对最后一个子任务显示，用于创建下一个同级子任务
+          isLastChild && React.createElement('button', {
+            className: `action-btn continue-btn ${buttonCooldown[`${BUTTON_IDS.CONTINUE_TASK}_${task.id}`] ? 'disabled' : ''}`,
+            disabled: buttonCooldown[`${BUTTON_IDS.CONTINUE_TASK}_${task.id}`],
+            onClick: (e: React.MouseEvent) => {
+              e.stopPropagation();
+              onContinueTask(task.id);
+            },
+            title: '延续创建下一个同级子任务'
+          },
+            React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
+              React.createElement('line', { x1: '5', y1: '12', x2: '19', y2: '12' }),
+              React.createElement('polyline', { points: '12 5 19 12 12 19' })
+            )
+          ),
           React.createElement('button', {
             className: `action-btn ${buttonCooldown[`${BUTTON_IDS.ADD_SUB_TASK}_${task.id}`] ? 'disabled' : ''}`,
             disabled: buttonCooldown[`${BUTTON_IDS.ADD_SUB_TASK}_${task.id}`],
@@ -1448,7 +1627,7 @@ const TaskItem: React.FC<{
       )
     ),
     hasChildren && React.createElement('ul', { className: `children ${isExpanded ? '' : 'collapsed'}`, style: childrenStyle },
-      task.children!.map((child) =>
+      task.children!.map((child, index) =>
         React.createElement(TaskItem, {
           key: child.id,
           task: child,
@@ -1464,6 +1643,8 @@ const TaskItem: React.FC<{
           onClaudeExecute,
           onDelete,
           onAddSubTask,
+          onContinueTask,
+          isLastChild: index === task.children!.length - 1,  // 【实现R46】判断是否为最后一个子任务
           claudeExecuting,
           onDoubleClick,
           onSaveComplete,

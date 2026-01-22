@@ -402,6 +402,24 @@
   opacity: 0.7;
 }
 
+/* 【实现R46】延续按钮样式 */
+.action-btn.continue-btn {
+  background-color: #2d7a2d;
+  color: white;
+}
+
+.action-btn.continue-btn:hover {
+  background-color: #3d9a3d;
+}
+
+.action-btn.continue-btn.disabled,
+.action-btn.continue-btn:disabled {
+  background-color: #2a4a2a;
+  color: #666;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .children {
   margin-left: 24px;
   border-left: 1px solid #3c3c3c;
@@ -757,4 +775,122 @@
 /* 链接计数文字 */
 .link-count {
   font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* 【R13.5】普通文本块样式 */
+.text-block {
+  cursor: text;
+  transition: background-color 0.15s ease;
+}
+
+.text-block:hover {
+  background-color: #333333;
+}
+
+/* 【R13.5】普通文本块内容区域样式 */
+.textblock-content {
+  min-height: 20px;
+  outline: none;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.textblock-content a {
+  color: #3794ff;
+}
+
+.textblock-content code {
+  background-color: #3c3c3c;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+/* 【R13.5】普通文本块编辑模式样式 */
+.textblock-content-edit {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  background-color: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  color: #e0e0e0;
+  padding: 8px 12px;
+  width: 100%;
+  resize: vertical;
+  outline: none;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  min-height: 0;
+}
+
+.textblock-content-edit:focus {
+  border-color: #007acc;
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+}
+
+/* 普通文本块中的Markdown渲染样式 */
+.textblock-content h1,
+.textblock-content h2,
+.textblock-content h3,
+.textblock-content h4,
+.textblock-content h5,
+.textblock-content h6 {
+  margin: 8px 0 4px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.textblock-content h1 { font-size: 16px; }
+.textblock-content h2 { font-size: 15px; }
+.textblock-content h3 { font-size: 14px; }
+.textblock-content h4 { font-size: 13px; }
+.textblock-content h5,
+.textblock-content h6 { font-size: 12px; color: #888; }
+
+.textblock-content p {
+  margin: 4px 0;
+}
+
+.textblock-content strong {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.textblock-content em {
+  font-style: italic;
+}
+
+.textblock-content ul,
+.textblock-content ol {
+  margin: 4px 0;
+  padding-left: 24px;
+}
+
+.textblock-content li {
+  margin: 2px 0;
+}
+
+.textblock-content blockquote {
+  margin: 4px 0;
+  padding: 4px 12px;
+  border-left: 3px solid #3c3c3c;
+  background-color: #2d2d2d;
+  color: #888;
+}
+
+.textblock-content pre {
+  margin: 4px 0;
+  padding: 8px 12px;
+  background-color: #2d2d2d;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.textblock-content pre code {
+  background-color: transparent;
+  padding: 0;
+  font-size: 12px;
+  color: #d4d4d4;
 }
