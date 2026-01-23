@@ -131,12 +131,12 @@ export class TodoWebviewProvider {
       return;
     }
 
-    // 启动5秒周期的定时器
+    // 启动1秒周期的定时器【R47.2】
     this.refreshTimer = setInterval(async () => {
       await this.checkAndRefresh();
-    }, 5000);
+    }, 1000);
 
-    console.log('[MDTODO-R47.1] 已启动定期刷新定时器（5秒周期），监测文件:', this.currentFilePath);
+    console.log('[MDTODO-R47.2] 已启动定期刷新定时器（1秒周期），监测文件:', this.currentFilePath);
   }
 
   /**
@@ -1092,6 +1092,8 @@ export class TodoWebviewProvider {
         this.updateWebview();
         // 【实现R47】记录文件内容用于后续比较
         await this.recordCurrentFileContent();
+        // 【R47.2】确保在 loadFile 后启动定期刷新定时器
+        this.startPeriodicRefresh();
         return true;
       } else {
         console.log('[MDTODO] Format not matched, setting empty state');
@@ -1103,6 +1105,8 @@ export class TodoWebviewProvider {
         this.updateWebview();
         // 【实现R47】记录文件内容用于后续比较
         await this.recordCurrentFileContent();
+        // 【R47.2】确保在 loadFile 后启动定期刷新定时器
+        this.startPeriodicRefresh();
         return false;
       }
     } catch (error: any) {
