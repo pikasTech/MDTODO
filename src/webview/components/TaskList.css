@@ -453,6 +453,7 @@
   overflow-y: auto !important;
   scrollbar-width: thin;
   scrollbar-color: #424242 #1e1e1e;
+  padding-bottom: 10px; /* 【修复R50.5】添加底部padding，避免滚动到底部时被遮挡 */
 }
 
 /* 收起状态下的滚动条样式 - Webkit浏览器 */

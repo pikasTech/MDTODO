@@ -72,9 +72,6 @@ module.exports = [
         },
       ],
     },
-    externals: {
-      react: 'React',
-      'react-dom': 'ReactDOM',
-    },
+    // No externals - React will be bundled
   }
 ];

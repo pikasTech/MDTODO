@@ -1551,7 +1551,10 @@ const TaskItem: React.FC<{
       React.createElement('div', { className: 'task-main' },
         React.createElement('div', {
           className: 'task-main-left',
-          onClick: () => onSelect(task.id),
+          onClick: (e: React.MouseEvent) => {
+            e.stopPropagation(); // 【修复R50.5】阻止事件冒泡，避免触发任务选择
+            onSelect(task.id);
+          },
           tabIndex: 0,
           role: 'button',
         },
