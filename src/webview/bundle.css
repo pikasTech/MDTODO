@@ -434,7 +434,8 @@
   right: 0;
   z-index: 100;
 }
-.filter-bar {
+/* 【实现R51.5】展开状态的完整筛选栏 */
+.filter-bar-expanded {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -444,6 +445,18 @@
   border-bottom: 1px solid #3c3c3c;
   transition: all 0.2s ease;
 }
+/* 【实现R51.5】展开状态的完整筛选栏 */
+.filter-bar-expanded {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  background-color: #1e1e1e;
+  border-bottom: 1px solid #3c3c3c;
+  transition: all 0.2s ease;
+}
+
 /* 【实现R51.5】收起状态的简化筛选栏 */
 .filter-bar-collapsed {
   display: flex;
