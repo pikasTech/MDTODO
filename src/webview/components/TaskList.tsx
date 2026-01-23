@@ -1149,31 +1149,26 @@ const TaskList: React.FC<TaskListProps> = (props) => {
             })
           )
         ),
-        // 全部展开按钮 - 图标
+        // 【R51.10】全部展开/收起合并按钮
         React.createElement('button', {
-          className: `toolbar-icon-btn ${buttonCooldown[BUTTON_IDS.EXPAND_ALL] ? 'disabled' : ''}`,
-          disabled: buttonCooldown[BUTTON_IDS.EXPAND_ALL],
-          onClick: handleExpandAll,
-          title: '全部展开'
+          className: `toolbar-icon-btn expand-collapse-btn ${expandedTasks.size > 0 && expandedTasks.size === getAllTaskIds(tasks).length ? 'expanded' : ''} ${buttonCooldown[BUTTON_IDS.EXPAND_ALL] || buttonCooldown[BUTTON_IDS.COLLAPSE_ALL] ? 'disabled' : ''}`,
+          disabled: buttonCooldown[BUTTON_IDS.EXPAND_ALL] || buttonCooldown[BUTTON_IDS.COLLAPSE_ALL],
+          onClick: () => {
+            // 如果全部展开了就收起，否则就展开
+            const allIds = getAllTaskIds(tasks);
+            const allExpanded = allIds.length > 0 && allIds.every(id => expandedTasks.has(id));
+            if (allExpanded) {
+              handleCollapseAll();
+            } else {
+              handleExpandAll();
+            }
+          },
+          title: expandedTasks.size > 0 && expandedTasks.size === getAllTaskIds(tasks).length ? '全部收起' : '全部展开'
         },
           React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
             React.createElement('polyline', { points: '15 3 21 3 21 9' }),
             React.createElement('polyline', { points: '9 21 3 21 3 15' }),
             React.createElement('line', { x1: '21', y1: '3', x2: '14', y2: '10' }),
-            React.createElement('line', { x1: '3', y1: '21', x2: '10', y2: '14' })
-          )
-        ),
-        // 全部收起按钮 - 图标
-        React.createElement('button', {
-          className: `toolbar-icon-btn ${buttonCooldown[BUTTON_IDS.COLLAPSE_ALL] ? 'disabled' : ''}`,
-          disabled: buttonCooldown[BUTTON_IDS.COLLAPSE_ALL],
-          onClick: handleCollapseAll,
-          title: '全部收起'
-        },
-          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
-            React.createElement('polyline', { points: '4 14 10 14 10 20' }),
-            React.createElement('polyline', { points: '20 10 14 10 14 4' }),
-            React.createElement('line', { x1: '14', y1: '10', x2: '21', y2: '3' }),
             React.createElement('line', { x1: '3', y1: '21', x2: '10', y2: '14' })
           )
         ),
