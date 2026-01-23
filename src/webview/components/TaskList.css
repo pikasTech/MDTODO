@@ -4,7 +4,7 @@
   height: 100vh;
   background-color: #1e1e1e;
   color: #d4d4d4;
-  padding: 0 20px;
+  padding: 0 0;
 }
 
 .header {
@@ -440,9 +440,9 @@
 }
 
 .children {
-  margin-left: 24px;
+  margin-left: 6px;
   border-left: 1px solid #3c3c3c;
-  padding-left: 16px;
+  padding-left: 4px;
   padding-top: 8px;
   overflow: hidden;
   transition: max-height 0.2s ease-out;
@@ -454,6 +454,44 @@
   scrollbar-width: thin;
   scrollbar-color: #424242 #1e1e1e;
   padding-bottom: 10px; /* 【修复R50.5】添加底部padding，避免滚动到底部时被遮挡 */
+  position: relative;
+}
+
+/* 【实现R51.3】滚动阴影样式 - 使用sticky定位避免被overflow裁剪 */
+.scroll-shadow-top {
+  position: sticky;
+  top: -8px; /* 抵消父元素的 padding-top */
+  left: 0;
+  right: 0;
+  height: 48px; /* 40px + 8px padding */
+  background: linear-gradient(to bottom, rgba(20, 20, 20, 0.9), rgba(20, 20, 20, 0.4), transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.15s ease;
+  margin-bottom: -48px;
+}
+
+.scroll-shadow-bottom {
+  position: sticky;
+  bottom: -12px; /* 抵消父元素的 padding-bottom */
+  left: 0;
+  right: 0;
+  height: 52px; /* 40px + 12px */
+  background: linear-gradient(to top, rgba(20, 20, 20, 0.9), rgba(20, 20, 20, 0.4), transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.15s ease;
+  margin-top: -52px;
+}
+
+.children.collapsed-preview.can-scroll-up .scroll-shadow-top {
+  opacity: 1;
+}
+
+.children.collapsed-preview.can-scroll-down .scroll-shadow-bottom {
+  opacity: 1;
 }
 
 /* 收起状态下的滚动条样式 - Webkit浏览器 */
@@ -496,8 +534,10 @@
   max-width: 400px;
 }
 
+/* 现代细滚动条样式 */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -505,12 +545,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #424242;
-  border-radius: 4px;
+  background: #3a3a3a;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #4a4a4a;
 }
 
 .empty-state {

@@ -62,11 +62,16 @@ export class TodoWebviewProvider {
       this.startPeriodicRefresh();
     } else {
       console.log('[MDTODO-R47.1] 创建新的 panel');
+      // 【R51.2】使用 Beside 代替 Two，以实现对半分宽度
+      // 当使用 Beside 时，VSCode 会自动分配相等的空间给两个列
+      const activeEditor = vscode.window.activeTextEditor;
+      const viewColumn = activeEditor ? vscode.ViewColumn.Beside : vscode.ViewColumn.Two;
+
       // 在右侧新列打开，使用文件名作为标题
       this.panel = vscode.window.createWebviewPanel(
         'mdtodoPanel',
         panelTitle,
-        vscode.ViewColumn.Two,  // 右侧第二列
+        viewColumn,
         {
           enableScripts: true,
           retainContextWhenHidden: true,

@@ -5,7 +5,8 @@
   height: 100vh;
   background-color: #1e1e1e;
   color: #d4d4d4;
-  padding: 0 20px;
+  padding: 0 0;
+  position: relative; /* 【修复R51.5.1】为绝对定位的子元素提供定位参照 */
 }
 .header {
   display: flex;
@@ -384,18 +385,20 @@
   text-overflow: ellipsis;
   max-width: 400px;
 }
+/* 现代细滚动条样式 */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: #1e1e1e;
 }
 ::-webkit-scrollbar-thumb {
-  background: #424242;
-  border-radius: 4px;
+  background: #3a3a3a;
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #4a4a4a;
 }
 .empty-state {
   display: flex;
@@ -423,6 +426,14 @@
 .delete-btn:hover {
   background-color: #e74c3c !important;
 }
+/* 【实现R51.5】筛选栏容器 - 使用绝对定位覆盖在内容上方 */
+.filter-bar-container {
+  position: absolute;
+  top: 45px; /* header高度略下方 */
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -431,9 +442,30 @@
   padding: 10px 12px;
   background-color: #1e1e1e;
   border-bottom: 1px solid #3c3c3c;
-  position: sticky;
-  top: 0;
-  z-index: 50;
+  transition: all 0.2s ease;
+}
+/* 【实现R51.5】收起状态的简化筛选栏 */
+.filter-bar-collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background-color: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.filter-bar-collapsed:hover {
+  background-color: #2d2d2d;
+}
+.filter-bar-collapsed-text {
+  font-size: 13px;
+  color: #888;
+}
+.filter-bar-hint {
+  font-size: 11px;
+  color: #666;
 }
 .filter-group {
   display: flex;

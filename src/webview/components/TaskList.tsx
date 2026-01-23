@@ -100,8 +100,10 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const lastScrollTimeRef = React.useRef<number>(0);
   // 【实现R29.2】双向滚动同步开关，默认关闭
   const [syncScrollEnabled, setSyncScrollEnabled] = React.useState(false);
-  // 【实现R37.3】跳转到下一个未完成任务的当前位置记录
-  const [lastJumpIndex, setLastJumpIndex] = React.useState(-1);
+  // 【实现R51.5】筛选栏展开/收起状态，默认收起
+  const [filterBarExpanded, setFilterBarExpanded] = React.useState(false);
+  // 防抖状态，避免频繁切换
+  const filterBarTransitioning = React.useRef(false);
 
   // 【R13.5】普通文本块编辑状态
   const [textBlockEditModes, setTextBlockEditModes] = React.useState<Record<string, boolean>>({});
@@ -765,9 +767,9 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     return undefined;
   };
 
-  // 【实现R29.1】发送焦点状态到extension
+  // 【实现R29.1】发送焦点状态到extension（注释掉以减少高频日志）
   const notifyWebviewActive = React.useCallback(() => {
-    sendMessage({ type: 'webviewActive' });
+    // sendMessage({ type: 'webviewActive' });
   }, [sendMessage]);
 
   // 【实现R29.2】切换双向滚动同步开关
@@ -1071,13 +1073,18 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     );
   };
 
-  // 渲染筛选栏
+  // 渲染筛选栏 - 【实现R51.5】支持展开/收起，默认收起，鼠标悬停时展开
   const renderFilterBar = () => {
     const filteredStats = getFilteredStats();
     // 【实现R28/R28.1】获取所有任务ID用于跳转下拉菜单，按文档原始顺序（移除sort，保持文档顺序）
     const allTaskIds = getAllTasks(tasks).map(t => t.id);
 
-    return React.createElement('div', { className: 'filter-bar' },
+    // 【实现R51.5】展开状态下的完整内容
+    const expandedContent = React.createElement('div', {
+      className: 'filter-bar filter-bar-expanded',
+      // 阻止事件冒泡，避免触发header的mouseLeave
+      onMouseEnter: (e) => e.stopPropagation(),
+    },
       // 【实现R28】任务跳转下拉菜单 - 位于最左侧
       React.createElement('div', { className: 'filter-group' },
         React.createElement('span', { className: 'filter-label' }, '跳转:'),
@@ -1143,10 +1150,32 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         `显示 ${filteredStats.total} 个任务，${filteredStats.completed} 已完成`
       )
     );
+
+    // 【实现R51.5】收起状态下的简化显示（显示搜索和跳转的简化入口）
+    const collapsedContent = React.createElement('div', { className: 'filter-bar-collapsed' },
+      React.createElement('span', { className: 'filter-bar-collapsed-text' }, '🔍 搜索 / 跳转'),
+      React.createElement('span', { className: 'filter-bar-hint' }, '将鼠标移动到这里展开筛选栏')
+    );
+
+    return filterBarExpanded ? expandedContent : collapsedContent;
   };
 
   return React.createElement('div', { className: 'app' },
-    React.createElement('header', { className: 'header' },
+    React.createElement('header', {
+      className: 'header',
+      // 【实现R51.5】鼠标进入header区域时展开筛选栏
+      onMouseEnter: () => {
+        if (!filterBarTransitioning.current) {
+          setFilterBarExpanded(true);
+        }
+      },
+      // 【实现R51.5】鼠标离开header区域时收起筛选栏
+      onMouseLeave: () => {
+        if (!filterBarTransitioning.current) {
+          setFilterBarExpanded(false);
+        }
+      }
+    },
       React.createElement('h1', null, displayTitle),
       React.createElement('div', { className: 'header-actions' },
         // 【实现R29.2】双向滚动同步开关按钮
@@ -1288,8 +1317,23 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         )
       )
     ),
-    // 浮动筛选栏 - 位于header下方，滚动时固定在顶部
-    tasks.length > 0 && renderFilterBar(),
+    // 【实现R51.5】筛选栏容器 - 使用绝对定位覆盖在内容上方，不推挤task内容
+    tasks.length > 0 && React.createElement('div', {
+      className: 'filter-bar-container',
+      // 阻止事件冒泡到main，避免在筛选栏上移动时触发收起
+      onMouseEnter: (e) => {
+        e.stopPropagation();
+        if (!filterBarTransitioning.current) {
+          setFilterBarExpanded(true);
+        }
+      },
+      onMouseLeave: (e) => {
+        e.stopPropagation();
+        if (!filterBarTransitioning.current) {
+          setFilterBarExpanded(false);
+        }
+      }
+    }, renderFilterBar()),
     React.createElement('main', { className: 'task-container' },
       renderApiError(),
       // 渲染普通文本块
@@ -1429,6 +1473,48 @@ const TaskItem: React.FC<{
   // 【实现R48.1】固定高度，足够显示约5-6个子任务
   const PREVIEW_MAX_HEIGHT = 300;
 
+  // 【实现R51.3】滚动阴影状态：是否可以向上/向下滚动
+  const [canScrollUp, setCanScrollUp] = React.useState(false);
+  const [canScrollDown, setCanScrollDown] = React.useState(false);
+
+  // 【实现R51.3】更新滚动阴影状态
+  const updateScrollShadows = React.useCallback(() => {
+    if (childrenRef.current) {
+      const element = childrenRef.current;
+      const scrollTop = element.scrollTop;
+      const scrollHeight = element.scrollHeight;
+      const clientHeight = element.clientHeight;
+
+      // 可以向上滚动：scrollTop > 0
+      const canUp = scrollTop > 0;
+      // 可以向下滚动：scrollTop + clientHeight < scrollHeight
+      const canDown = scrollTop + clientHeight < scrollHeight - 1;
+
+      // console.log('[R51.3.1] 滚动状态: scrollTop=', scrollTop, 'scrollHeight=', scrollHeight, 'clientHeight=', clientHeight, 'canScrollUp=', canUp, 'canScrollDown=', canDown);
+
+      setCanScrollUp(canUp);
+      setCanScrollDown(canDown);
+    }
+  }, []);
+
+  // 【实现R51.3】监听滚动事件，更新阴影状态
+  React.useEffect(() => {
+    const element = childrenRef.current;
+    if (!element) return;
+
+    // 【R51.3】初始更新阴影状态
+    updateScrollShadows();
+
+    const handleScroll = () => {
+      updateScrollShadows();
+    };
+
+    element.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      element.removeEventListener('scroll', handleScroll);
+    };
+  }, [expandedTasks, showChildrenCount, task.children, updateScrollShadows]);
+
   // 【修复R48.3】当有子任务进入编辑模式时保存当前滚动位置，退出时恢复
   React.useEffect(() => {
     // 当 editingTaskParentId 等于当前任务ID时，说明当前任务有子任务正在编辑
@@ -1456,19 +1542,21 @@ const TaskItem: React.FC<{
       const timer = setTimeout(() => {
         if (childrenRef.current && savedScrollRef.current === 0) {
           // 只有当没有保存滚动位置时才自动滚动
-          console.log('[R48.3] 自动滚动到底部: scrollHeight=', childrenRef.current.scrollHeight);
-          childrenRef.current.scrollTop = childrenRef.current.scrollHeight;
+          // console.log('[R48.3] 自动滚动到底部: scrollHeight=', childrenRef.current.scrollHeight);
+          childrenRef.current.scrollTo({ top: childrenRef.current.scrollHeight, behavior: 'smooth' });
         }
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [isExpanded, showChildrenCount, task.children, editingTaskParentId, task.id]);
+  }, [expandedTasks, showChildrenCount, task.children, editingTaskParentId, task.id]);
 
   const childrenStyle = {
     maxHeight: isExpanded ? '10000px' : `${PREVIEW_MAX_HEIGHT}px`,
     marginLeft: `${24 + depth * 16}px`,
     // 【实现R48.1】收起状态下允许滚动查看全部子任务
     overflowY: isExpanded ? 'hidden' : 'auto',
+    // 【R51.4.1】收起状态下启用平滑滚动
+    scrollBehavior: isExpanded ? undefined : 'smooth',
   };
 
   // 【修复R23】当进入编辑模式时，从rawContent初始化editValue（保留原始格式）
@@ -1573,14 +1661,6 @@ const TaskItem: React.FC<{
                 ),
                 React.createElement('span', { className: 'link-count' }, `${task.linkExists}/${task.linkCount}`)
               ),
-              // 【实现R50.4】展开/折叠按钮和完成选择框移到链接状态右侧
-              hasChildren && React.createElement('div', {
-                className: `expand-icon ${isExpanded ? 'expanded' : ''}`,
-                onClick: (e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  onToggleExpand(task.id);
-                },
-              }, '▶'),
               React.createElement('div', {
                 className: `task-checkbox ${task.completed ? 'checked' : ''}`,
                 onClick: (e: React.MouseEvent) => {
@@ -1683,9 +1763,12 @@ const TaskItem: React.FC<{
     hasChildren && React.createElement('ul', {
       ref: childrenRef,
       // 【实现R48.1】收起状态下添加collapsed-preview类名以显示滚动条
-      className: `children${!isExpanded ? ' collapsed-preview' : ''}`,
+      // 【实现R51.3】根据滚动位置添加/移除滚动阴影类名
+      className: `children${!isExpanded ? ' collapsed-preview' : ''}${canScrollUp ? ' can-scroll-up' : ''}${canScrollDown ? ' can-scroll-down' : ''}`,
       style: childrenStyle
     },
+      // 【实现R51.3】顶部滚动阴影 - 使用sticky定位
+      !isExpanded && React.createElement('div', { className: 'scroll-shadow-top' }),
       // 【实现R48.1】收起时渲染全部子任务，但滚动到最下方显示最后2条
       (task.children || []).map((child, index) =>
         React.createElement(TaskItem, {
@@ -1712,7 +1795,9 @@ const TaskItem: React.FC<{
           onSaveComplete,
           onTaskContentClick,
         })
-      )
+      ),
+      // 【实现R51.3】底部滚动阴影 - 使用sticky定位
+      !isExpanded && React.createElement('div', { className: 'scroll-shadow-bottom' })
     )
   );
 };
