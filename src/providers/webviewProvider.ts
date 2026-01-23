@@ -1765,19 +1765,18 @@ export class TodoWebviewProvider {
 
   /**
    * 获取Webview HTML内容
+   * CSS 由 webpack 打包到 bundle.js 中内联，无需单独加载
    */
   private getHtmlContent(): string {
     const templatePath = path.join(this.context.extensionPath, 'resources', 'template.html');
-    const cssUri = this.panel!.webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'resources', 'style.css')
-    );
     const bundleUri = this.panel!.webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'resources', 'bundle.js')
     );
 
     try {
       let html = fs.readFileSync(templatePath, 'utf-8');
-      html = html.replace('{{STYLE_CSS_URI}}', cssUri.toString());
+      // 不再加载 style.css，样式已内联到 bundle.js
+      html = html.replace('{{STYLE_CSS_URI}}', '');
       html = html.replace('{{BUNDLE_JS_URI}}', bundleUri.toString());
       return html;
     } catch (error) {

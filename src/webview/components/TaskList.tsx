@@ -98,12 +98,10 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const lastScrollTaskRef = React.useRef<string>('');
   const SCROLL_THROTTLE = 300; // 滚动节流时间（毫秒）
   const lastScrollTimeRef = React.useRef<number>(0);
-  // 【实现R29.2】双向滚动同步开关，默认关闭
+  // 双向滚动同步开关，默认关闭
   const [syncScrollEnabled, setSyncScrollEnabled] = React.useState(false);
-  // 【实现R51.5】筛选栏展开/收起状态，默认收起
-  const [filterBarExpanded, setFilterBarExpanded] = React.useState(false);
-  // 防抖状态，避免频繁切换
-  const filterBarTransitioning = React.useRef(false);
+  // 跳转下一个未完成任务的索引
+  const [lastJumpIndex, setLastJumpIndex] = React.useState(-1);
 
   // 【R13.5】普通文本块编辑状态
   const [textBlockEditModes, setTextBlockEditModes] = React.useState<Record<string, boolean>>({});
@@ -628,6 +626,9 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     };
   };
 
+  // 【R51.5.7】获取所有任务用于跳转下拉菜单
+  const allTasks = React.useMemo(() => getAllTasks(tasks), [tasks]);
+
   // 清除筛选条件
   const handleClearFilter = () => {
     setFilterType('all');
@@ -894,7 +895,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   }, [handleScroll, notifyWebviewActive, syncScrollEnabled]);
 
   // 判断是否有任何筛选条件激活
-  const hasActiveFilters = filterType !== 'all' || searchKeyword.trim() !== '';
+  // 【R51.5.7】筛选栏的激活状态只检查筛选类型（搜索已独立到标题栏）
+  const hasActiveFilters = filterType !== 'all';
 
   // 显示 API 错误提示
   const renderApiError = () => {
@@ -1073,110 +1075,20 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     );
   };
 
-  // 渲染筛选栏 - 【实现R51.5】支持展开/收起，默认收起，鼠标悬停时展开
-  const renderFilterBar = () => {
-    const filteredStats = getFilteredStats();
-    // 【实现R28/R28.1】获取所有任务ID用于跳转下拉菜单，按文档原始顺序（移除sort，保持文档顺序）
-    const allTaskIds = getAllTasks(tasks).map(t => t.id);
+  // 【R51.5.8】筛选状态处理逻辑保留
+  // 保留的筛选状态：filterType, searchKeyword, jumpToTaskId
+  // 保留的筛选功能：filterTasks, handleJumpToTask, handleClearFilter
 
-    // 【实现R51.5】展开状态下的完整内容
-    const expandedContent = React.createElement('div', {
-      className: 'filter-bar-expanded',
-      // 阻止事件冒泡，避免触发header的mouseLeave
-      onMouseEnter: (e) => e.stopPropagation(),
-    },
-      // 【实现R28】任务跳转下拉菜单 - 位于最左侧
-      React.createElement('div', { className: 'filter-group' },
-        React.createElement('span', { className: 'filter-label' }, '跳转:'),
-        React.createElement('select', {
-          className: 'jump-select',
-          value: jumpToTaskId,
-          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => handleJumpToTask(e.target.value)
-        },
-          React.createElement('option', { value: '' }, '-- 选择任务 --'),
-          allTaskIds.map(taskId =>
-            React.createElement('option', { key: taskId, value: taskId }, taskId)
-          )
-        )
-      ),
-      React.createElement('div', { className: 'filter-group' },
-        React.createElement('span', { className: 'filter-label' }, '状态:'),
-        React.createElement('div', { className: 'filter-buttons' },
-          React.createElement('button', {
-            className: `filter-btn ${filterType === 'all' ? 'active' : ''}`,
-            onClick: () => setFilterType('all')
-          }, '全部'),
-          React.createElement('button', {
-            className: `filter-btn ${filterType === 'active' ? 'active' : ''}`,
-            onClick: () => setFilterType('active')
-          }, '未开始'),
-          React.createElement('button', {
-            className: `filter-btn ${filterType === 'processing' ? 'active' : ''}`,
-            onClick: () => setFilterType('processing')
-          }, '进行中'),
-          React.createElement('button', {
-            className: `filter-btn ${filterType === 'hide-completed' ? 'active' : ''}`,
-            onClick: () => setFilterType('hide-completed')
-          }, '隐藏已完成')
-        )
-      ),
-      React.createElement('div', { className: 'filter-group' },
-        React.createElement('span', { className: 'filter-label' }, '搜索:'),
-        React.createElement('input', {
-          type: 'text',
-          className: 'search-input',
-          placeholder: '输入关键词搜索...',
-          value: searchKeyword,
-          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSearchKeyword(e.target.value)
-        }),
-        searchKeyword && React.createElement('button', {
-          className: 'clear-search-btn',
-          onClick: () => setSearchKeyword(''),
-          title: '清除搜索'
-        }, '×')
-      ),
-      hasActiveFilters && React.createElement('button', {
-        className: 'clear-filter-btn',
-        onClick: handleClearFilter
-      }, '清除筛选'),
-      // 添加任务按钮放入筛选栏内
-      React.createElement('button', {
-        className: `btn btn-primary add-task-btn ${buttonCooldown[BUTTON_IDS.ADD_TASK] ? 'disabled' : ''}`,
-        disabled: buttonCooldown[BUTTON_IDS.ADD_TASK],
-        onClick: handleAddTask,
-        title: '添加新任务'
-      }, '+ 添加任务'),
-      React.createElement('div', { className: 'filter-stats' },
-        `显示 ${filteredStats.total} 个任务，${filteredStats.completed} 已完成`
-      )
-    );
-
-    // 【实现R51.5】收起状态下的简化显示（显示搜索和跳转的简化入口）
-    const collapsedContent = React.createElement('div', { className: 'filter-bar-collapsed' },
-      React.createElement('span', { className: 'filter-bar-collapsed-text' }, '🔍 搜索 / 跳转'),
-      React.createElement('span', { className: 'filter-bar-hint' }, '将鼠标移动到这里展开筛选栏')
-    );
-
-    return filterBarExpanded ? expandedContent : collapsedContent;
-  };
+  // 筛选类型选项 - 【R51.5.8】用于下拉菜单
+  const filterOptions = [
+    { type: 'all' as const, label: '全部' },
+    { type: 'hide-completed' as const, label: '隐藏完成' },
+    { type: 'active' as const, label: '未开始' },
+    { type: 'processing' as const, label: '进行中' },
+  ];
 
   return React.createElement('div', { className: 'app' },
-    React.createElement('header', {
-      className: 'header',
-      // 【实现R51.5】鼠标进入header区域时展开筛选栏
-      onMouseEnter: () => {
-        if (!filterBarTransitioning.current) {
-          setFilterBarExpanded(true);
-        }
-      },
-      // 【实现R51.5】鼠标离开header区域时收起筛选栏
-      onMouseLeave: () => {
-        if (!filterBarTransitioning.current) {
-          setFilterBarExpanded(false);
-        }
-      }
-    },
-      React.createElement('h1', null, displayTitle),
+    React.createElement('header', { className: 'header' },
       React.createElement('div', { className: 'header-actions' },
         // 【实现R29.2】双向滚动同步开关按钮
         React.createElement('button', {
@@ -1189,8 +1101,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
             fill: 'none',
             stroke: 'currentColor',
             strokeWidth: 2,
-            width: 16,
-            height: 16
+            width: 14,
+            height: 14
           },
             React.createElement('path', {
               d: 'M17 1l4 4-4 4'
@@ -1213,7 +1125,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           onClick: handleExpandAll,
           title: '全部展开'
         },
-          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 16, height: 16 },
+          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
             React.createElement('polyline', { points: '15 3 21 3 21 9' }),
             React.createElement('polyline', { points: '9 21 3 21 3 15' }),
             React.createElement('line', { x1: '21', y1: '3', x2: '14', y2: '10' }),
@@ -1227,7 +1139,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           onClick: handleCollapseAll,
           title: '全部收起'
         },
-          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 16, height: 16 },
+          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
             React.createElement('polyline', { points: '4 14 10 14 10 20' }),
             React.createElement('polyline', { points: '20 10 14 10 14 4' }),
             React.createElement('line', { x1: '14', y1: '10', x2: '21', y2: '3' }),
@@ -1241,7 +1153,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           onClick: handleRefresh,
           title: '刷新'
         },
-          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 16, height: 16 },
+          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
             React.createElement('polyline', { points: '23 4 23 10 17 10' }),
             React.createElement('path', { d: 'M20.49 15a9 9 0 1 1-2.12-9.36L23 10' })
           )
@@ -1253,7 +1165,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           onClick: handleOpenFile,
           title: '打开文件'
         },
-          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 16, height: 16 },
+          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
             React.createElement('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
             React.createElement('polyline', { points: '14 2 14 8 20 8' }),
             React.createElement('line', { x1: '16', y1: '13', x2: '8', y2: '13' }),
@@ -1268,7 +1180,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           onClick: handleOpenSourceFile,
           title: '在VSCode中打开原文'
         },
-          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 16, height: 16 },
+          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
             React.createElement('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
             React.createElement('polyline', { points: '15 3 21 3 21 9' }),
             React.createElement('line', { x1: '10', y1: '14', x2: '21', y2: '3' })
@@ -1281,7 +1193,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           onClick: handleScrollToTop,
           title: '快速到顶部'
         },
-          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 16, height: 16 },
+          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
             React.createElement('polyline', { points: '18 15 12 9 6 15' })
           )
         ),
@@ -1292,7 +1204,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           onClick: handleScrollToBottom,
           title: '快速到底部'
         },
-          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 16, height: 16 },
+          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
             React.createElement('polyline', { points: '6 9 12 15 18 9' })
           )
         ),
@@ -1304,7 +1216,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
             onClick: handleJumpToNextIncomplete,
             title: '跳转到下一个未完成任务（循环）'
           },
-            React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 16, height: 16 },
+            React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
               React.createElement('circle', { cx: '12', cy: '12', r: '10' }),
               React.createElement('polyline', { points: '12 6 16 10 12 14' }),
               React.createElement('line', { x1: '8', y1: '10', x2: '8', y2: '14' })
@@ -1314,26 +1226,73 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           incompleteCount > 0 && React.createElement('span', {
             className: 'jump-next-badge'
           }, incompleteCount)
+        ),
+        // 【R51.5.7】跳转下拉菜单 - 图标形式
+        React.createElement('div', { className: 'header-dropdown' },
+          React.createElement('select', {
+            className: 'header-select',
+            value: jumpToTaskId,
+            onChange: (e: React.ChangeEvent<HTMLSelectElement>) => handleJumpToTask(e.target.value),
+            title: '跳转到任务'
+          },
+            React.createElement('option', { value: '' }, '跳转'),
+            allTasks.map(task =>
+              React.createElement('option', {
+                key: task.id,
+                value: task.id,
+              }, task.id)
+            )
+          )
+        ),
+        // 【R51.5.7】搜索框（常驻显示）
+        React.createElement('div', { className: 'header-search' },
+          React.createElement('input', {
+            type: 'text',
+            className: 'header-search-input',
+            placeholder: '搜索...',
+            value: searchKeyword,
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSearchKeyword(e.target.value),
+          }),
+          searchKeyword && React.createElement('button', {
+            className: 'search-clear-btn',
+            onClick: () => setSearchKeyword(''),
+            title: '清除搜索'
+          }, '×')
+        ),
+        // 【R51.5.8】筛选下拉菜单
+        React.createElement('select', {
+          className: 'filter-dropdown',
+          value: filterType,
+          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setFilterType(e.target.value as FilterType),
+          title: '筛选任务'
+        },
+          filterOptions.map(option =>
+            React.createElement('option', {
+              key: option.type,
+              value: option.type,
+            }, option.label)
+          )
+        ),
+        // 【R51.5.8】清除筛选按钮（当有激活的筛选时显示）
+        hasActiveFilters && React.createElement('button', {
+          className: 'clear-filter-btn toolbar-icon-btn',
+          onClick: handleClearFilter,
+          title: '清除筛选'
+        }, '×'),
+        // 添加任务按钮 - 图标形式
+        React.createElement('button', {
+          className: `toolbar-icon-btn add-task-header-btn ${buttonCooldown[BUTTON_IDS.ADD_TASK] ? 'disabled' : ''}`,
+          disabled: buttonCooldown[BUTTON_IDS.ADD_TASK],
+          onClick: handleAddTask,
+          title: '添加任务'
+        },
+          React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
+            React.createElement('line', { x1: '12', y1: '5', x2: '12', y2: '19' }),
+            React.createElement('line', { x1: '5', y1: '12', x2: '19', y2: '12' })
+          )
         )
       )
     ),
-    // 【实现R51.5】筛选栏容器 - 使用绝对定位覆盖在内容上方，不推挤task内容
-    tasks.length > 0 && React.createElement('div', {
-      className: 'filter-bar-container',
-      // 阻止事件冒泡到main，避免在筛选栏上移动时触发收起
-      onMouseEnter: (e) => {
-        e.stopPropagation();
-        if (!filterBarTransitioning.current) {
-          setFilterBarExpanded(true);
-        }
-      },
-      onMouseLeave: (e) => {
-        e.stopPropagation();
-        if (!filterBarTransitioning.current) {
-          setFilterBarExpanded(false);
-        }
-      }
-    }, renderFilterBar()),
     React.createElement('main', { className: 'task-container' },
       renderApiError(),
       // 渲染普通文本块
