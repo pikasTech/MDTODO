@@ -1081,7 +1081,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
     // 【实现R51.5】展开状态下的完整内容
     const expandedContent = React.createElement('div', {
-      className: 'filter-bar filter-bar-expanded',
+      className: 'filter-bar-expanded',
       // 阻止事件冒泡，避免触发header的mouseLeave
       onMouseEnter: (e) => e.stopPropagation(),
     },
