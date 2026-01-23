@@ -184,8 +184,9 @@
 .task-id-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
 }
 
 .task-id {
@@ -352,24 +353,35 @@
 .task-actions {
   flex-shrink: 0;
   display: flex;
-  gap: 6px;
+  gap: 4px;
   justify-content: flex-end;
   margin-top: 4px;
 }
 
+/* 内联按钮样式 - 放在task-id-wrapper右侧 */
+.task-actions-inline {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
 .action-btn {
-  padding: 4px 10px;
+  padding: 2px 4px;
   border: none;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 12px;
-  background-color: #3c3c3c;
-  color: #d4d4d4;
-  transition: background-color 0.15s;
+  font-size: 11px;
+  background-color: transparent;
+  color: #888;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .action-btn:hover {
-  background-color: #4c4c4c;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
 }
 
 .action-btn.active {
@@ -386,36 +398,38 @@
 }
 
 .action-btn.claude-btn {
-  background-color: #d97706;
-  color: white;
+  background-color: transparent;
+  color: #d97706;
 }
 
 .action-btn.claude-btn:hover {
-  background-color: #b45309;
+  background-color: rgba(217, 119, 6, 0.2);
+  color: #fbbf24;
 }
 
 .action-btn.claude-btn.disabled,
 .action-btn.claude-btn:disabled {
-  background-color: #6b5b3d;
-  color: #999;
+  background-color: transparent;
+  color: #6b5b3d;
   cursor: not-allowed;
   opacity: 0.7;
 }
 
 /* 【实现R46】延续按钮样式 */
 .action-btn.continue-btn {
-  background-color: #2d7a2d;
-  color: white;
+  background-color: transparent;
+  color: #2d7a2d;
 }
 
 .action-btn.continue-btn:hover {
-  background-color: #3d9a3d;
+  background-color: rgba(45, 122, 45, 0.2);
+  color: #4ade4a;
 }
 
 .action-btn.continue-btn.disabled,
 .action-btn.continue-btn:disabled {
-  background-color: #2a4a2a;
-  color: #666;
+  background-color: transparent;
+  color: #2a4a2a;
   cursor: not-allowed;
   opacity: 0.7;
 }
@@ -427,6 +441,32 @@
   padding-top: 8px;
   overflow: hidden;
   transition: max-height 0.2s ease-out;
+}
+
+/* 【实现R48.1】收起状态下的子任务区域样式 - 添加滚动条 */
+.children.collapsed-preview {
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: #424242 #1e1e1e;
+}
+
+/* 收起状态下的滚动条样式 - Webkit浏览器 */
+.children.collapsed-preview::-webkit-scrollbar {
+  width: 6px;
+}
+
+.children.collapsed-preview::-webkit-scrollbar-track {
+  background: #1e1e1e;
+  border-radius: 3px;
+}
+
+.children.collapsed-preview::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 3px;
+}
+
+.children.collapsed-preview::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
 
 .children.collapsed {
@@ -491,12 +531,13 @@
 }
 
 .delete-btn {
-  background-color: #c0392b !important;
-  color: white !important;
+  background-color: transparent !important;
+  color: #888 !important;
 }
 
 .delete-btn:hover {
-  background-color: #e74c3c !important;
+  background-color: rgba(192, 57, 43, 0.2) !important;
+  color: #e74c3c !important;
 }
 
 /* 筛选栏样式 - 浮动在顶部 */

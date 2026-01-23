@@ -1333,6 +1333,7 @@ export class TodoWebviewProvider {
   /**
    * 生成新任务的内容模板
    * 【R36.1】统一主任务和子任务的添加逻辑
+   * 【R49】修改报告文件命名方式：使用时间戳命名，如 20260123_1050_Task_Report.md
    * @param taskId 新任务ID
    * @param parentTaskId 父任务ID（如果有则为子任务）
    * @returns 新任务的内容模板字符串
@@ -1340,7 +1341,15 @@ export class TodoWebviewProvider {
   private generateNewTaskContent(taskId: string, parentTaskId?: string): string {
     // 构建报告文件路径
     const fileName = path.basename(this.currentFilePath, '.md');
-    const reportPath = `./details/${fileName}/${taskId}_Task_Report.md`;
+    // 【R49】使用时间戳格式命名：YYYYMMDD_HHmm_Task_Report.md
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const timestamp = `${year}${month}${day}_${hours}${minutes}`;
+    const reportPath = `./details/${fileName}/${timestamp}_Task_Report.md`;
 
     // 确定标题级别：主任务用 ##，子任务用 ###
     const headerLevel = parentTaskId ? '###' : '##';

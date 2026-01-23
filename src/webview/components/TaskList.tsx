@@ -78,6 +78,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   // 使用 ref 跟踪 editingTaskIds 的当前值，避免 useEffect 闭包问题
   const editingTaskIdsRef = React.useRef(editingTaskIds);
   editingTaskIdsRef.current = editingTaskIds;
+  // 【修复R48.3】跟踪当前编辑任务的父任务ID，用于控制滚动行为
+  const [editingTaskParentId, setEditingTaskParentId] = React.useState<string>('');
   // Claude执行按钮防抖状态 - 【实现R38.2】使用1秒独立防抖，避免误触
   const [claudeExecuting, setClaudeExecuting] = React.useState<Record<string, boolean>>({});
   const CLAUDE_EXECUTE_COOLDOWN = 1000; // 1秒冷却
@@ -117,7 +119,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
   // 保存完成后退出编辑模式的处理函数
   const handleSaveComplete = (taskId: string) => {
-    console.log('[Webview] handleSaveComplete: 退出编辑模式', taskId);
+    // console.log('[Webview] handleSaveComplete: 退出编辑模式', taskId);
     setEditModes((prev) => ({
       ...prev,
       [taskId]: false,
@@ -136,7 +138,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
   // 刷新单个任务标题（外部调用）
   const handleRefreshTaskTitle = (taskId: string, newTitle: string) => {
-    console.log('[Webview] handleRefreshTaskTitle:', taskId, newTitle);
+    // console.log('[Webview] handleRefreshTaskTitle:', taskId, newTitle);
     setTasks((prevTasks) => {
       const updateTask = (taskList: Task[]): Task[] => {
         return taskList.map((task) => {
@@ -189,7 +191,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   // 【修复R20】确保编辑模式互斥：进入新任务编辑模式时，清除其他任务的编辑状态
   React.useEffect(() => {
     if (pendingScrollTaskId) {
-      console.log('[Webview] pendingScrollTaskId effect triggered for:', pendingScrollTaskId);
+      // console.log('[Webview] pendingScrollTaskId effect triggered for:', pendingScrollTaskId);
       const taskElement = document.querySelector(`[data-task-id="${pendingScrollTaskId}"]`);
       if (taskElement) {
         taskElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -204,7 +206,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         });
         // 【修复R20】同时更新 editingTaskIds，确保只有一个任务在编辑
         setEditingTaskIds(new Set([pendingScrollTaskId]));
-        console.log('[Webview] 已进入编辑模式并确保互斥:', pendingScrollTaskId);
+        // console.log('[Webview] 已进入编辑模式并确保互斥:', pendingScrollTaskId);
         // 清除待滚动标记
         setPendingScrollTaskId(null);
       }
@@ -215,21 +217,17 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     const handleMessage = (event: any) => {
       const message = event.data;
       if (message.type === 'updateTasks') {
-        console.log('[Webview] Received updateTasks, tasks:', message.tasks?.length, 'textBlocks:', message.textBlocks?.length, 'filePath:', message.filePath);
+    //    console.log('[Webview] Received updateTasks, tasks:', message.tasks?.length, 'textBlocks:', message.textBlocks?.length, 'filePath:', message.filePath);
         setTasks(message.tasks || []);
         setTextBlocks(message.textBlocks || []);
         // 【修复R25】更新filePath状态
         setCurrentFilePath(message.filePath || '');
         // 【实现R34】更新显示标题（从文件路径提取文件名，不带.md后缀）
         setDisplayTitle(getFileName(message.filePath || ''));
-        // 默认展开所有任务
-        const allTaskIds = getAllTaskIds(message.tasks || []);
-        setExpandedTasks(new Set(allTaskIds));
-
-        // 【修复R19/R20】刷新文件时清除编辑状态，但保留正在编辑的任务
-        // 使用 editingTaskIdsRef 来判断哪些任务正在被编辑
+        // 【实现R48.2】默认启动时采用折叠模式，不默认展开任何任务
+        // 只保留正在编辑的任务的展开状态
         const currentlyEditing = Array.from(editingTaskIdsRef.current);
-        console.log('[Webview] updateTasks: 正在编辑的任务:', currentlyEditing);
+        // console.log('[Webview] updateTasks: 正在编辑的任务:', currentlyEditing);
 
         // 清除所有编辑状态，但保留正在编辑的任务的编辑状态
         setEditModes(prev => {
@@ -254,7 +252,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
           return next;
         });
 
-        console.log('[Webview] updateTasks: 已更新编辑状态，保留正在编辑的任务');
+        // console.log('[Webview] updateTasks: 已更新编辑状态，保留正在编辑的任务');
       } else if (message.type === 'newTaskAdded') {
         // 设置待滚动的任务ID，tasks更新后会触发滚动
         setPendingScrollTaskId(message.taskId);
@@ -262,7 +260,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         setEditingTaskIds(new Set([message.taskId]));
         // 【修复R24】同时设置editModes，让新任务进入编辑模式
         setEditModes({ [message.taskId]: true });
-        console.log('[Webview] newTaskAdded: 设置新任务', message.taskId, '为编辑状态');
+        // console.log('[Webview] newTaskAdded: 设置新任务', message.taskId, '为编辑状态');
         // 确保父任务展开
         const parentId = message.taskId.split('.').slice(0, -1).join('.');
         if (parentId) {
@@ -338,7 +336,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const handleExpandAll = () => {
     // 防抖：如果冷却中，不执行
     if (buttonCooldown[BUTTON_IDS.EXPAND_ALL]) {
-      console.log('[Webview] 展开按钮防抖，跳过重复点击');
+      // console.log('[Webview] 展开按钮防抖，跳过重复点击');
       return;
     }
     const allTaskIds = getAllTaskIds(tasks);
@@ -354,7 +352,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const handleCollapseAll = () => {
     // 防抖：如果冷却中，不执行
     if (buttonCooldown[BUTTON_IDS.COLLAPSE_ALL]) {
-      console.log('[Webview] 收起按钮防抖，跳过重复点击');
+      // console.log('[Webview] 收起按钮防抖，跳过重复点击');
       return;
     }
     setExpandedTasks(new Set());
@@ -369,7 +367,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     // 防抖：如果冷却中，不执行
     const cooldownId = `${BUTTON_IDS.TOGGLE_COMPLETE}_${taskId}`;
     if (buttonCooldown[cooldownId]) {
-      console.log('[Webview] 完成复选框防抖，跳过重复点击');
+      // console.log('[Webview] 完成复选框防抖，跳过重复点击');
       return;
     }
     sendMessage({ type: 'markComplete', taskId });
@@ -388,7 +386,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     // 这个函数主要用于Escape键取消编辑
     // 编辑模式由双击进入，blur退出
     const willBeEditMode = !editModes[taskId];
-    console.log('[Webview] handleToggleEdit:', taskId, '->', willBeEditMode ? '编辑模式' : '非编辑模式');
+    // console.log('[Webview] handleToggleEdit:', taskId, '->', willBeEditMode ? '编辑模式' : '非编辑模式');
 
     // 【修复R20】确保编辑模式互斥：当进入编辑模式时，关闭所有其他任务的编辑状态
     if (willBeEditMode) {
@@ -413,8 +411,12 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
   // 双击进入编辑模式
   // 【修复R20】确保编辑模式互斥：关闭其他任务的编辑状态
+  // 【修复R48.3】设置当前编辑任务的父任务ID，用于控制滚动行为
   const handleDoubleClick = (taskId: string) => {
-    console.log('[Webview] handleDoubleClick: 进入编辑模式', taskId);
+    // 计算父任务ID（用于控制滚动）
+    const parentId = taskId.split('.').slice(0, -1).join('.');
+    console.log('[R48.3] handleDoubleClick: taskId=', taskId, ', parentId=', parentId);
+    setEditingTaskParentId(parentId);
     // 关闭所有其他任务的编辑状态，只保留当前任务
     setEditModes({
       [taskId]: true,
@@ -429,7 +431,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
   // 【R13.5】普通文本块双击进入编辑模式
   const handleTextBlockDoubleClick = (blockId: string) => {
-    console.log('[Webview] handleTextBlockDoubleClick: 进入编辑模式', blockId);
+    // console.log('[Webview] handleTextBlockDoubleClick: 进入编辑模式', blockId);
     // 关闭其他文本块的编辑状态，只保留当前
     setTextBlockEditModes({
       [blockId]: true,
@@ -653,7 +655,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
   // 【实现R29】滚动到指定任务（来自VSCode编辑器的滚动同步）
   const handleScrollToTask = (taskId: string, lineNumber: number) => {
-    console.log('[Webview] scrollToTask:', taskId, 'line:', lineNumber);
+//    console.log('[Webview] scrollToTask:', taskId, 'line:', lineNumber);
 
     // 确保任务展开
     const parentId = taskId.split('.').slice(0, -1).join('.');
@@ -684,7 +686,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       e.stopPropagation(); // 阻止事件冒泡到 task-main-left，避免触发 handleSelect
       const href = anchorElement.getAttribute('href');
       if (href) {
-        console.log(`[Webview] 点击链接 (任务 ${taskId}):`, href);
+//        console.log(`[Webview] 点击链接 (任务 ${taskId}):`, href);
         sendMessage({ type: 'openLink', url: href });
       }
     } else {
@@ -1317,6 +1319,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
               expandedTasks,
               editModes,
               buttonCooldown,
+              editingTaskParentId,  // 【修复R48.3】传递当前编辑任务的父任务ID
               onToggleExpand: handleToggleExpand,
               onToggleComplete: handleToggleComplete,
               onSelect: handleSelect,
@@ -1334,6 +1337,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
             })
           )
         )
+      )
     ),
     React.createElement('footer', { className: 'status-bar' },
       React.createElement('span', { className: 'file-path' }, currentFilePath || '未选择文件'),
@@ -1349,6 +1353,7 @@ const TaskItem: React.FC<{
   editModes: Record<string, boolean>;
   claudeExecuting: Record<string, boolean>;
   buttonCooldown: Record<string, boolean>;  // 按钮冷却状态 - 【修复R38.1】改为每个按钮独立防抖
+  editingTaskParentId: string;  // 【修复R48.3】当前编辑任务的父任务ID
   onToggleExpand: (taskId: string) => void;
   onToggleComplete: (taskId: string) => void;
   onSelect: (taskId: string) => void;
@@ -1370,6 +1375,7 @@ const TaskItem: React.FC<{
     editModes,
     claudeExecuting,
     buttonCooldown,
+    editingTaskParentId,  // 【修复R48.3】当前编辑任务的父任务ID
     onToggleExpand,
     onToggleComplete,
     onSelect,
@@ -1412,13 +1418,60 @@ const TaskItem: React.FC<{
 
   const hasChildren = task.children && task.children.length > 0;
   const isExpanded = expandedTasks.has(task.id);
+  // 【实现R48】收起状态下显示最近2条子任务（安全处理空值）
+  const childrenLength = task.children ? task.children.length : 0;
+  // 【实现R48.1】收起时仍然渲染全部子任务，但滚动到最下方显示最后2条
+  const showChildrenCount = isExpanded ? childrenLength : childrenLength;
   const isEditMode = editModes[task.id] || false;
   // Check if this is a newly added task (empty rawContent and just entered edit mode)
   const isNewTask = (task.rawContent || task.title).trim() === '' && isEditMode;
-  // 【修复R44】增大 maxHeight 到 10000px，解决长内容子任务被截断遮盖的问题
+  // 【实现R48.1】收起状态下可以滚动查看全部子任务
+  const childrenRef = React.useRef<HTMLUListElement>(null);
+  // 【修复R48.3】保存滚动位置的ref，进入编辑模式时保存，退出时恢复
+  const savedScrollRef = React.useRef<number>(0);
+  // 【实现R48.1】固定高度，足够显示约5-6个子任务
+  const PREVIEW_MAX_HEIGHT = 300;
+
+  // 【修复R48.3】当有子任务进入编辑模式时保存当前滚动位置，退出时恢复
+  React.useEffect(() => {
+    // 当 editingTaskParentId 等于当前任务ID时，说明当前任务有子任务正在编辑
+    if (editingTaskParentId === task.id && childrenRef.current) {
+      if (savedScrollRef.current === 0) {
+        // 第一次检测到，进入编辑模式，保存滚动位置
+        savedScrollRef.current = childrenRef.current.scrollTop;
+        console.log('[R48.3] 有子任务进入编辑模式，保存滚动位置:', savedScrollRef.current, 'parentId:', task.id);
+      }
+    } else if (savedScrollRef.current > 0 && childrenRef.current && editingTaskParentId === '') {
+      // 子任务退出编辑模式，恢复滚动位置
+      console.log('[R48.3] 子任务退出编辑模式，恢复滚动位置:', savedScrollRef.current);
+      childrenRef.current.scrollTop = savedScrollRef.current;
+      savedScrollRef.current = 0;
+    }
+  }, [editingTaskParentId, task.id]);
+
+  // 【实现R48.1】收起状态切换时滚动到最后（显示最后2条）
+  // 【修复R48.3】当有子任务正在编辑时，不自动滚动
+  React.useEffect(() => {
+    // 当有子任务正在编辑时（editingTaskParentId === task.id），不自动滚动
+    const hasChildEditing = editingTaskParentId === task.id;
+    if (!isExpanded && !hasChildEditing && childrenRef.current && task.children && task.children.length > 2) {
+      // 使用 setTimeout 确保DOM渲染完成后再滚动
+      const timer = setTimeout(() => {
+        if (childrenRef.current && savedScrollRef.current === 0) {
+          // 只有当没有保存滚动位置时才自动滚动
+          console.log('[R48.3] 自动滚动到底部: scrollHeight=', childrenRef.current.scrollHeight);
+          childrenRef.current.scrollTop = childrenRef.current.scrollHeight;
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isExpanded, showChildrenCount, task.children, editingTaskParentId, task.id]);
+
   const childrenStyle = {
-    maxHeight: isExpanded ? '10000px' : '0',
+    maxHeight: isExpanded ? '10000px' : `${PREVIEW_MAX_HEIGHT}px`,
     marginLeft: `${24 + depth * 16}px`,
+    // 【实现R48.1】收起状态下允许滚动查看全部子任务
+    overflowY: isExpanded ? 'hidden' : 'auto',
   };
 
   // 【修复R23】当进入编辑模式时，从rawContent初始化editValue（保留原始格式）
@@ -1533,6 +1586,69 @@ const TaskItem: React.FC<{
                   React.createElement('path', { d: 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' })
                 ),
                 React.createElement('span', { className: 'link-count' }, `${task.linkExists}/${task.linkCount}`)
+              ),
+              // 【实现R50】操作按钮移到task-id-wrapper右侧，内联样式
+              React.createElement('div', { className: 'task-actions-inline' },
+                // 【实现R46】延续按钮：仅对最后一个子任务显示，用于创建下一个同级子任务
+                isLastChild && React.createElement('button', {
+                  className: `action-btn continue-btn ${buttonCooldown[`${BUTTON_IDS.CONTINUE_TASK}_${task.id}`] ? 'disabled' : ''}`,
+                  disabled: buttonCooldown[`${BUTTON_IDS.CONTINUE_TASK}_${task.id}`],
+                  onClick: (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    onContinueTask(task.id);
+                  },
+                  title: '延续创建下一个同级子任务'
+                },
+                  React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 12, height: 12 },
+                    React.createElement('line', { x1: '5', y1: '12', x2: '19', y2: '12' }),
+                    React.createElement('polyline', { points: '12 5 19 12 12 19' })
+                  )
+                ),
+                React.createElement('button', {
+                  className: `action-btn ${buttonCooldown[`${BUTTON_IDS.ADD_SUB_TASK}_${task.id}`] ? 'disabled' : ''}`,
+                  disabled: buttonCooldown[`${BUTTON_IDS.ADD_SUB_TASK}_${task.id}`],
+                  onClick: (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    onAddSubTask(task.id);
+                  },
+                  title: '添加子任务'
+                },
+                  React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 12, height: 12 },
+                    React.createElement('line', { x1: '12', y1: '5', x2: '12', y2: '19' }),
+                    React.createElement('line', { x1: '5', y1: '12', x2: '19', y2: '12' })
+                  )
+                ),
+                React.createElement('button', {
+                  className: `action-btn delete-btn ${buttonCooldown[`${BUTTON_IDS.DELETE_TASK}_${task.id}`] ? 'disabled' : ''}`,
+                  disabled: buttonCooldown[`${BUTTON_IDS.DELETE_TASK}_${task.id}`],
+                  onClick: (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    onDelete(task.id);
+                  },
+                  title: '删除任务'
+                },
+                  React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 12, height: 12 },
+                    React.createElement('polyline', { points: '3 6 5 6 21 6' }),
+                    React.createElement('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
+                    React.createElement('line', { x1: '10', y1: '11', x2: '10', y2: '17' }),
+                    React.createElement('line', { x1: '14', y1: '11', x2: '14', y2: '17' })
+                  )
+                ),
+                React.createElement('button', {
+                  className: `action-btn claude-btn ${claudeExecuting[task.id] ? 'disabled' : ''}`,
+                  disabled: claudeExecuting[task.id],
+                  onClick: (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (!claudeExecuting[task.id]) {
+                      onClaudeExecute(task.id);
+                    }
+                  },
+                  title: claudeExecuting[task.id] ? '执行中...' : '执行任务'
+                },
+                  React.createElement('svg', { viewBox: '0 0 24 24', fill: 'currentColor', stroke: 'none', width: 12, height: 12 },
+                    React.createElement('polygon', { points: '5 3 19 12 5 21 5 3' })
+                  )
+                )
               )
             ),
             // 【修复R22.3】使用原生textarea替代contentEditable，支持多行编辑
@@ -1560,74 +1676,17 @@ const TaskItem: React.FC<{
                   style: { cursor: 'pointer' }
                 })
           )
-        ),
-        // 按钮区域移到任务内容下方，右对齐
-        React.createElement('div', { className: 'task-actions' },
-          // 【实现R46】延续按钮：仅对最后一个子任务显示，用于创建下一个同级子任务
-          isLastChild && React.createElement('button', {
-            className: `action-btn continue-btn ${buttonCooldown[`${BUTTON_IDS.CONTINUE_TASK}_${task.id}`] ? 'disabled' : ''}`,
-            disabled: buttonCooldown[`${BUTTON_IDS.CONTINUE_TASK}_${task.id}`],
-            onClick: (e: React.MouseEvent) => {
-              e.stopPropagation();
-              onContinueTask(task.id);
-            },
-            title: '延续创建下一个同级子任务'
-          },
-            React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
-              React.createElement('line', { x1: '5', y1: '12', x2: '19', y2: '12' }),
-              React.createElement('polyline', { points: '12 5 19 12 12 19' })
-            )
-          ),
-          React.createElement('button', {
-            className: `action-btn ${buttonCooldown[`${BUTTON_IDS.ADD_SUB_TASK}_${task.id}`] ? 'disabled' : ''}`,
-            disabled: buttonCooldown[`${BUTTON_IDS.ADD_SUB_TASK}_${task.id}`],
-            onClick: (e: React.MouseEvent) => {
-              e.stopPropagation();
-              onAddSubTask(task.id);
-            },
-            title: '添加子任务'
-          },
-            React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
-              React.createElement('line', { x1: '12', y1: '5', x2: '12', y2: '19' }),
-              React.createElement('line', { x1: '5', y1: '12', x2: '19', y2: '12' })
-            )
-          ),
-          React.createElement('button', {
-            className: `action-btn delete-btn ${buttonCooldown[`${BUTTON_IDS.DELETE_TASK}_${task.id}`] ? 'disabled' : ''}`,
-            disabled: buttonCooldown[`${BUTTON_IDS.DELETE_TASK}_${task.id}`],
-            onClick: (e: React.MouseEvent) => {
-              e.stopPropagation();
-              onDelete(task.id);
-            },
-            title: '删除任务'
-          },
-            React.createElement('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, width: 14, height: 14 },
-              React.createElement('polyline', { points: '3 6 5 6 21 6' }),
-              React.createElement('path', { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' }),
-              React.createElement('line', { x1: '10', y1: '11', x2: '10', y2: '17' }),
-              React.createElement('line', { x1: '14', y1: '11', x2: '14', y2: '17' })
-            )
-          ),
-          React.createElement('button', {
-            className: `action-btn claude-btn ${claudeExecuting[task.id] ? 'disabled' : ''}`,
-            disabled: claudeExecuting[task.id],
-            onClick: (e: React.MouseEvent) => {
-              e.stopPropagation();
-              if (!claudeExecuting[task.id]) {
-                onClaudeExecute(task.id);
-              }
-            },
-            title: claudeExecuting[task.id] ? '执行中...' : '执行任务'
-          },
-            React.createElement('svg', { viewBox: '0 0 24 24', fill: 'currentColor', stroke: 'none', width: 14, height: 14 },
-              React.createElement('polygon', { points: '5 3 19 12 5 21 5 3' })
-            )
-          )
         )
       )
-    ),
-    hasChildren && React.createElement('ul', { className: `children ${isExpanded ? '' : 'collapsed'}`, style: childrenStyle },
-      task.children!.map((child, index) =>
+    }),
+    hasChildren && React.createElement('ul', {
+      ref: childrenRef,
+      // 【实现R48.1】收起状态下添加collapsed-preview类名以显示滚动条
+      className: `children${!isExpanded ? ' collapsed-preview' : ''}`,
+      style: childrenStyle
+    },
+      // 【实现R48.1】收起时渲染全部子任务，但滚动到最下方显示最后2条
+      (task.children || []).map((child, index) =>
         React.createElement(TaskItem, {
           key: child.id,
           task: child,
@@ -1635,6 +1694,7 @@ const TaskItem: React.FC<{
           expandedTasks,
           editModes,
           buttonCooldown,
+          editingTaskParentId,  // 【修复R48.3】传递当前编辑任务的父任务ID
           onToggleExpand,
           onToggleComplete,
           onSelect,
@@ -1644,7 +1704,8 @@ const TaskItem: React.FC<{
           onDelete,
           onAddSubTask,
           onContinueTask,
-          isLastChild: index === task.children!.length - 1,  // 【实现R46】判断是否为最后一个子任务
+          // 【实现R48.1】isLastChild 基于实际子任务总数判断
+          isLastChild: index === childrenLength - 1,
           claudeExecuting,
           onDoubleClick,
           onSaveComplete,

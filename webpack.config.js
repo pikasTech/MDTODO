@@ -2,12 +2,12 @@ const path = require('path');
 const webpack = require('webpack');
 
 module.exports = [
-  // Extension bundle (uses main tsconfig)
+  // Extension bundle (uses main tsconfig, output to out/ for VSCode loading)
   {
     mode: 'production',
     entry: './src/extension.ts',
     output: {
-      path: path.resolve(__dirname, 'dist'),
+      path: path.resolve(__dirname, 'out'),
       filename: 'extension.js',
       libraryTarget: 'commonjs2',
       devtoolModuleFilenameTemplate: '../[resource-path]'
