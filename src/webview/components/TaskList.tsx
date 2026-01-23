@@ -228,13 +228,15 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         // 只保留正在编辑的任务的展开状态
         const currentlyEditing = Array.from(editingTaskIdsRef.current);
         // console.log('[Webview] updateTasks: 正在编辑的任务:', currentlyEditing);
+        // 获取所有任务ID用于判断
+        const allCurrentTaskIds = getAllTaskIds(message.tasks || []);
 
         // 清除所有编辑状态，但保留正在编辑的任务的编辑状态
         setEditModes(prev => {
           const next: Record<string, boolean> = {};
           currentlyEditing.forEach(taskId => {
             // 只有当任务仍然存在于任务列表中时，才保留其编辑状态
-            if (allTaskIds.includes(taskId)) {
+            if (allCurrentTaskIds.includes(taskId)) {
               next[taskId] = true;
             }
           });
@@ -245,7 +247,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         setEditingTaskIds(prev => {
           const next = new Set(prev);
           currentlyEditing.forEach(taskId => {
-            if (!allTaskIds.includes(taskId)) {
+            if (!allCurrentTaskIds.includes(taskId)) {
               next.delete(taskId);
             }
           });
@@ -254,18 +256,14 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
         // console.log('[Webview] updateTasks: 已更新编辑状态，保留正在编辑的任务');
       } else if (message.type === 'newTaskAdded') {
-        // 设置待滚动的任务ID，tasks更新后会触发滚动
+        // 【R50.3】设置待滚动的任务ID，tasks更新后会触发滚动
         setPendingScrollTaskId(message.taskId);
         // 【修复R19】标记新任务正在编辑，防止文件重载后丢失编辑状态
         setEditingTaskIds(new Set([message.taskId]));
         // 【修复R24】同时设置editModes，让新任务进入编辑模式
         setEditModes({ [message.taskId]: true });
         // console.log('[Webview] newTaskAdded: 设置新任务', message.taskId, '为编辑状态');
-        // 确保父任务展开
-        const parentId = message.taskId.split('.').slice(0, -1).join('.');
-        if (parentId) {
-          setExpandedTasks(prev => new Set([...prev, parentId]));
-        }
+        // 【R50.3】不自动展开父任务，保持原折叠状态
       } else if (message.type === 'refreshTaskTitle') {
         // 刷新单个任务标题
         handleRefreshTaskTitle(message.taskId, message.newTitle);
@@ -1337,7 +1335,6 @@ const TaskList: React.FC<TaskListProps> = (props) => {
             })
           )
         )
-      )
     ),
     React.createElement('footer', { className: 'status-bar' },
       React.createElement('span', { className: 'file-path' }, currentFilePath || '未选择文件'),
@@ -1558,20 +1555,6 @@ const TaskItem: React.FC<{
           tabIndex: 0,
           role: 'button',
         },
-          hasChildren && React.createElement('div', {
-            className: `expand-icon ${isExpanded ? 'expanded' : ''}`,
-            onClick: (e: React.MouseEvent) => {
-              e.stopPropagation();
-              onToggleExpand(task.id);
-            },
-          }, '▶'),
-          React.createElement('div', {
-            className: `task-checkbox ${task.completed ? 'checked' : ''}`,
-            onClick: (e: React.MouseEvent) => {
-              e.stopPropagation();
-              onToggleComplete(task.id);
-            },
-          }),
           React.createElement('div', { className: 'task-content' },
             React.createElement('div', { className: 'task-id-wrapper' },
               React.createElement('span', { className: 'task-id' }, task.id),
@@ -1587,7 +1570,22 @@ const TaskItem: React.FC<{
                 ),
                 React.createElement('span', { className: 'link-count' }, `${task.linkExists}/${task.linkCount}`)
               ),
-              // 【实现R50】操作按钮移到task-id-wrapper右侧，内联样式
+              // 【实现R50.4】展开/折叠按钮和完成选择框移到链接状态右侧
+              hasChildren && React.createElement('div', {
+                className: `expand-icon ${isExpanded ? 'expanded' : ''}`,
+                onClick: (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  onToggleExpand(task.id);
+                },
+              }, '▶'),
+              React.createElement('div', {
+                className: `task-checkbox ${task.completed ? 'checked' : ''}`,
+                onClick: (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  onToggleComplete(task.id);
+                },
+              }),
+              // 【实现R50】操作按钮移到task-id-wrapper右侧
               React.createElement('div', { className: 'task-actions-inline' },
                 // 【实现R46】延续按钮：仅对最后一个子任务显示，用于创建下一个同级子任务
                 isLastChild && React.createElement('button', {
@@ -1678,7 +1676,7 @@ const TaskItem: React.FC<{
           )
         )
       )
-    }),
+    ),
     hasChildren && React.createElement('ul', {
       ref: childrenRef,
       // 【实现R48.1】收起状态下添加collapsed-preview类名以显示滚动条
