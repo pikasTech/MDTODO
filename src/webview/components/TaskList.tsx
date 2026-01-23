@@ -102,6 +102,12 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const [syncScrollEnabled, setSyncScrollEnabled] = React.useState(false);
   // 跳转下一个未完成任务的索引
   const [lastJumpIndex, setLastJumpIndex] = React.useState(-1);
+  // 【R51.9】高亮定位状态：用于在折叠模式下定位目标任务而不展开
+  const [highlightedTaskId, setHighlightedTaskId] = React.useState<string>('');
+  // 【R51.9】标记是否是"全部收起"操作触发的折叠，用于控制是否滚动到底
+  const [isCollapseAllTriggered, setIsCollapseAllTriggered] = React.useState(false);
+  // 【R51.9】标记跳转操作进行中，用于防止滚动到底效果干扰跳转
+  const [isJumpOperationInProgress, setIsJumpOperationInProgress] = React.useState(false);
 
   // 【R13.5】普通文本块编辑状态
   const [textBlockEditModes, setTextBlockEditModes] = React.useState<Record<string, boolean>>({});
@@ -353,7 +359,13 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       // console.log('[Webview] 收起按钮防抖，跳过重复点击');
       return;
     }
+    // 【R51.9】标记这是用户主动的"全部收起"操作，用于触发滚动到底
+    setIsCollapseAllTriggered(true);
     setExpandedTasks(new Set());
+    // 500ms后重置标志，让后续的收起操作不再触发滚动到底
+    setTimeout(() => {
+      setIsCollapseAllTriggered(false);
+    }, 500);
     // 设置防抖状态
     setButtonCooldown(prev => ({ ...prev, [BUTTON_IDS.COLLAPSE_ALL]: true }));
     setTimeout(() => {
@@ -635,44 +647,73 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     setSearchKeyword('');
   };
 
-  // 【实现R28】跳转到指定任务
-  const handleJumpToTask = (taskId: string) => {
-    setJumpToTaskId(taskId);
-    if (taskId) {
-      // 确保任务展开
-      const parentId = taskId.split('.').slice(0, -1).join('.');
-      if (parentId) {
-        setExpandedTasks(prev => new Set([...prev, parentId]));
-      }
-      // 滚动到任务位置 - 【修复R28.2】改为顶对齐
-      setTimeout(() => {
-        const taskElement = document.querySelector(`[data-task-id="${taskId}"]`);
-        if (taskElement) {
-          taskElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 50);
-    }
-  };
-
-  // 【实现R29】滚动到指定任务（来自VSCode编辑器的滚动同步）
-  const handleScrollToTask = (taskId: string, lineNumber: number) => {
-//    console.log('[Webview] scrollToTask:', taskId, 'line:', lineNumber);
-
-    // 确保任务展开
+  // 【R51.9】滚动到目标任务：支持折叠模式下的双层滚动
+  // 如果父任务已展开，正常滚动到目标
+  // 如果父任务折叠，先滚动到父任务，再滚动子任务区域内部到目标
+  const scrollToTask = (taskId: string, onComplete?: () => void) => {
     const parentId = taskId.split('.').slice(0, -1).join('.');
-    if (parentId) {
-      setExpandedTasks(prev => new Set([...prev, parentId]));
-    }
+    const isParentExpanded = parentId ? expandedTasks.has(parentId) : true;
 
-    // 滚动到任务位置 - 【修复R28.2】改为顶对齐
-    setTimeout(() => {
+    // 设置跳转操作进行中标志，防止滚动到底效果干扰
+    setIsJumpOperationInProgress(true);
+
+    // 设置高亮
+    setHighlightedTaskId(taskId);
+    // 3秒后清除高亮
+    setTimeout(() => setHighlightedTaskId(''), 3000);
+
+    if (isParentExpanded) {
+      // 父任务已展开，直接滚动到目标
       const taskElement = document.querySelector(`[data-task-id="${taskId}"]`);
       if (taskElement) {
         taskElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        // 更新最后滚动的任务
-        lastScrollTaskRef.current = taskId;
       }
-    }, 50);
+    } else {
+      // 父任务折叠，需要双层滚动
+      const targetElement = document.querySelector(`[data-task-id="${taskId}"]`);
+      const parentElement = document.querySelector(`[data-task-id="${parentId}"]`);
+
+      if (targetElement && parentElement) {
+        // 第一步：滚动主容器到父任务位置
+        parentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // 第二步：滚动子任务区域到目标位置
+        // 使用 setTimeout 确保主容器滚动完成后再滚动子任务区域
+        setTimeout(() => {
+          const childrenUl = parentElement.querySelector(':scope > .children, :scope > ul');
+          if (childrenUl) {
+            // 直接滚动到目标元素，使用 auto 避免动画冲突
+            childrenUl.scrollTo({ top: targetElement.offsetTop, behavior: 'auto' });
+          }
+        }, 300); // 等待主容器滚动完成
+      }
+    }
+
+    // 延迟清除跳转操作标志，确保滚动到底效果不会干扰
+    setTimeout(() => {
+      setIsJumpOperationInProgress(false);
+      if (onComplete) onComplete();
+    }, 400);
+  };
+
+  // 【实现R28】【R51.9】跳转到指定任务，跳转完成后复位下拉菜单
+  const handleJumpToTask = (taskId: string) => {
+    setJumpToTaskId(taskId);
+    if (taskId) {
+      scrollToTask(taskId, () => {
+        // 跳转完成后复位下拉菜单到"跳转"状态
+        setJumpToTaskId('');
+      });
+    }
+  };
+
+  // 【实现R29】【R51.9】滚动到指定任务（来自VSCode编辑器的滚动同步）
+  const handleScrollToTask = (taskId: string, lineNumber: number) => {
+//    console.log('[Webview] scrollToTask:', taskId, 'line:', lineNumber);
+    scrollToTask(taskId, () => {
+      // 更新最后滚动的任务
+      lastScrollTaskRef.current = taskId;
+    });
   };
 
   // 处理任务内容中的链接点击
@@ -848,18 +889,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
     const nextTask = incompleteTasks[nextIndex];
     if (nextTask) {
-      // 确保任务展开
-      const parentId = nextTask.id.split('.').slice(0, -1).join('.');
-      if (parentId) {
-        setExpandedTasks(prev => new Set([...prev, parentId]));
-      }
-      // 滚动到任务位置 - 顶对齐
-      setTimeout(() => {
-        const taskElement = document.querySelector(`[data-task-id="${nextTask.id}"]`);
-        if (taskElement) {
-          taskElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 50);
+      // 使用统一的滚动函数，支持折叠模式下的双层滚动
+      scrollToTask(nextTask.id);
       // 更新索引记录
       setLastJumpIndex(nextIndex);
     }
@@ -1321,6 +1352,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
               editModes,
               buttonCooldown,
               editingTaskParentId,  // 【修复R48.3】传递当前编辑任务的父任务ID
+              highlightedTaskId,  // 【R51.9】高亮定位状态
               onToggleExpand: handleToggleExpand,
               onToggleComplete: handleToggleComplete,
               onSelect: handleSelect,
@@ -1332,6 +1364,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
               onContinueTask: handleContinueTask,
               isLastChild: false,  // 顶层任务没有延续按钮
               claudeExecuting,
+              isCollapseAllTriggered,  // 【R51.9】标记"全部收起"操作
               onDoubleClick: handleDoubleClick,
               onSaveComplete: handleSaveComplete,
               onTaskContentClick: handleTaskContentClick,
@@ -1354,6 +1387,9 @@ const TaskItem: React.FC<{
   claudeExecuting: Record<string, boolean>;
   buttonCooldown: Record<string, boolean>;  // 按钮冷却状态 - 【修复R38.1】改为每个按钮独立防抖
   editingTaskParentId: string;  // 【修复R48.3】当前编辑任务的父任务ID
+  highlightedTaskId: string;  // 【R51.9】高亮定位状态
+  isCollapseAllTriggered: boolean;  // 【R51.9】标记"全部收起"操作
+  isJumpOperationInProgress: boolean;  // 【R51.9】标记跳转操作进行中
   onToggleExpand: (taskId: string) => void;
   onToggleComplete: (taskId: string) => void;
   onSelect: (taskId: string) => void;
@@ -1376,6 +1412,9 @@ const TaskItem: React.FC<{
     claudeExecuting,
     buttonCooldown,
     editingTaskParentId,  // 【修复R48.3】当前编辑任务的父任务ID
+    highlightedTaskId,  // 【R51.9】高亮定位状态
+    isCollapseAllTriggered,  // 【R51.9】标记"全部收起"操作
+    isJumpOperationInProgress,  // 【R51.9】标记跳转操作进行中
     onToggleExpand,
     onToggleComplete,
     onSelect,
@@ -1493,21 +1532,47 @@ const TaskItem: React.FC<{
 
   // 【实现R48.1】收起状态切换时滚动到最后（显示最后2条）
   // 【修复R48.3】当有子任务正在编辑时，不自动滚动
+  // 【R51.9】只响应"全部收起"操作，不响应跳转操作
   React.useEffect(() => {
     // 当有子任务正在编辑时（editingTaskParentId === task.id），不自动滚动
     const hasChildEditing = editingTaskParentId === task.id;
-    if (!isExpanded && !hasChildEditing && childrenRef.current && task.children && task.children.length > 2) {
-      // 使用 setTimeout 确保DOM渲染完成后再滚动
+    const shouldScroll = !isExpanded && !hasChildEditing && childrenRef.current &&
+                         task.children && task.children.length > 2 &&
+                         !isJumpOperationInProgress &&
+                         isCollapseAllTriggered;
+
+    if (shouldScroll) {
       const timer = setTimeout(() => {
         if (childrenRef.current && savedScrollRef.current === 0) {
-          // 只有当没有保存滚动位置时才自动滚动
-          // console.log('[R48.3] 自动滚动到底部: scrollHeight=', childrenRef.current.scrollHeight);
           childrenRef.current.scrollTo({ top: childrenRef.current.scrollHeight, behavior: 'smooth' });
         }
       }, 50);
       return () => clearTimeout(timer);
     }
-  }, [expandedTasks, showChildrenCount, task.children, editingTaskParentId, task.id]);
+  }, [isCollapseAllTriggered, isJumpOperationInProgress, isExpanded, editingTaskParentId, task.children, task.id]);
+
+  // 【R51.9】跟踪组件是否首次挂载，用于首次加载时滚动到底
+  const isInitialMountRef = React.useRef(true);
+
+  // 【R51.9】首次挂载时滚动到底（只在挂载时执行一次）
+  React.useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      const hasChildEditing = editingTaskParentId === task.id;
+      const shouldScroll = !isExpanded && !hasChildEditing && childrenRef.current &&
+                           task.children && task.children.length > 2;
+
+      if (shouldScroll) {
+        const timer = setTimeout(() => {
+          if (childrenRef.current && savedScrollRef.current === 0) {
+            childrenRef.current.scrollTo({ top: childrenRef.current.scrollHeight, behavior: 'smooth' });
+          }
+        }, 50);
+        return () => clearTimeout(timer);
+      }
+    }
+    return () => {};
+  }, []); // 空依赖数组，只在挂载时执行一次
 
   const childrenStyle = {
     maxHeight: isExpanded ? '10000px' : `${PREVIEW_MAX_HEIGHT}px`,
@@ -1589,10 +1654,13 @@ const TaskItem: React.FC<{
 
   // 计算任务样式类名
   const taskClassName = `task-item ${task.completed ? 'completed' : ''} ${task.processing ? 'processing' : ''}`;
+  // 【R51.9】高亮状态：当任务是定位目标时添加高亮样式
+  const isHighlighted = highlightedTaskId === task.id;
+  const taskCardClassName = `task-card${isHighlighted ? ' task-card-highlighted' : ''}`;
 
   return React.createElement('li', { className: taskClassName, 'data-task-id': task.id },
     React.createElement('div', {
-      className: 'task-card',
+      className: taskCardClassName,
       onDoubleClick: () => onDoubleClick(task.id),
     },
       React.createElement('div', { className: 'task-main' },
@@ -1738,6 +1806,9 @@ const TaskItem: React.FC<{
           editModes,
           buttonCooldown,
           editingTaskParentId,  // 【修复R48.3】传递当前编辑任务的父任务ID
+          highlightedTaskId,  // 【R51.9】高亮定位状态
+          isCollapseAllTriggered,  // 【R51.9】标记"全部收起"操作
+          isJumpOperationInProgress,  // 【R51.9】标记跳转操作进行中
           onToggleExpand,
           onToggleComplete,
           onSelect,

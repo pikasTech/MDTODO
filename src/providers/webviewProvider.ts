@@ -184,37 +184,38 @@ export class TodoWebviewProvider {
    * 【实现R47.1】检查文件是否有变化，并定期更新链接状态
    */
   private async checkAndRefresh(): Promise<void> {
-    console.log('[MDTODO-R47.1] checkAndRefresh() 定时器触发执行');
-    console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
-    console.log('[MDTODO-R47.1] panel 是否存在:', !!this.panel);
+    // 注释掉高频日志 - 【R51.9】
+    // console.log('[MDTODO-R47.1] checkAndRefresh() 定时器触发执行');
+    // console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
+    // console.log('[MDTODO-R47.1] panel 是否存在:', !!this.panel);
 
     // 【R47.1】检查必要条件
     if (!this.currentFilePath) {
-      console.log('[MDTODO-R47.1] currentFilePath 为空，跳过刷新检查');
+      // console.log('[MDTODO-R47.1] currentFilePath 为空，跳过刷新检查');
       return;
     }
 
     if (!this.panel) {
-      console.log('[MDTODO-R47.1] panel 不存在，跳过刷新检查');
+      // console.log('[MDTODO-R47.1] panel 不存在，跳过刷新检查');
       return;
     }
 
     const fileExists = fs.existsSync(this.currentFilePath);
-    console.log('[MDTODO-R47.1] 监测文件是否存在:', fileExists);
+    // console.log('[MDTODO-R47.1] 监测文件是否存在:', fileExists);
 
     if (!fileExists) {
-      console.log('[MDTODO-R47.1] 监测文件不存在，跳过刷新检查');
+      // console.log('[MDTODO-R47.1] 监测文件不存在，跳过刷新检查');
       return;
     }
 
     try {
       const currentContent = fs.readFileSync(this.currentFilePath, 'utf-8');
-      console.log('[MDTODO-R47.1] 读取到文件内容，长度:', currentContent.length, '字符');
-      console.log('[MDTODO-R47.1] 记录的文件内容长度:', this.lastFileContent.length, '字符');
+      // console.log('[MDTODO-R47.1] 读取到文件内容，长度:', currentContent.length, '字符');
+      // console.log('[MDTODO-R47.1] 记录的文件内容长度:', this.lastFileContent.length, '字符');
 
       // 比较文件内容是否有变化
       const hasChanges = currentContent !== this.lastFileContent;
-      console.log('[MDTODO-R47.1] 文件是否有变化:', hasChanges);
+      // console.log('[MDTODO-R47.1] 文件是否有变化:', hasChanges);
 
       if (hasChanges) {
         console.log('[MDTODO-R47.1] 检测到文件变化，自动刷新...');
@@ -222,7 +223,7 @@ export class TodoWebviewProvider {
         this.lastFileContent = currentContent;
         console.log('[MDTODO-R47.1] 刷新完成，已更新记录');
       } else {
-        console.log('[MDTODO-R47.1] 文件无变化，但定期检查链接状态...');
+        // console.log('[MDTODO-R47.1] 文件无变化，但定期检查链接状态...');
         // 【R47.1】文件无变化时也要定期检查链接状态
         await this.checkAndUpdateLinkStatus();
       }
@@ -240,7 +241,8 @@ export class TodoWebviewProvider {
       return;
     }
 
-    console.log('[MDTODO-R47.1] 开始检查链接状态...');
+    // 注释掉高频日志 - 【R51.9】
+    // console.log('[MDTODO-R47.1] 开始检查链接状态...');
 
     // 重新解析文件以获取最新的链接状态
     const { TodoParser } = await import('../parser');
@@ -279,9 +281,11 @@ export class TodoWebviewProvider {
     if (hasLinkStatusChanges) {
       console.log('[MDTODO-R47.1] 链接状态有变化，刷新 webview...');
       this.sendToWebview();
-    } else {
-      console.log('[MDTODO-R47.1] 链接状态无变化');
     }
+    // 注释掉无变化日志 - 【R51.9】
+    // else {
+    //   console.log('[MDTODO-R47.1] 链接状态无变化');
+    // }
   }
 
   /**
