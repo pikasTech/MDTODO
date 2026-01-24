@@ -823,12 +823,14 @@
   position: relative;
 }
 
+/* 【R51.16】调高下拉框高度与图标按钮一致 */
 .header-select {
   appearance: none;
-  padding: 4px 20px 4px 8px;
+  padding: 6px 20px 6px 8px;
   border: 1px solid #3c3c3c;
   border-radius: 3px;
   font-size: 11px;
+  height: 26px;
   background-color: #2d2d2d;
   color: #d4d4d4;
   cursor: pointer;
@@ -857,9 +859,10 @@
   gap: 2px;
 }
 
+/* 【R51.16】调高搜索框高度与图标按钮一致 */
 .header-search-input {
   width: 100px;
-  padding: 4px 8px;
+  padding: 6px 8px;
   border: 1px solid #3c3c3c;
   border-radius: 3px;
   font-size: 11px;
@@ -921,13 +924,14 @@
   color: white;
 }
 
-/* 筛选下拉菜单样式 */
+/* 【R51.16】调高筛选下拉框高度与图标按钮一致 */
 .filter-dropdown {
   appearance: none;
-  padding: 4px 20px 4px 8px;
+  padding: 6px 20px 6px 8px;
   border: 1px solid #3c3c3c;
   border-radius: 3px;
   font-size: 11px;
+  height: 26px;
   background-color: #2d2d2d;
   color: #d4d4d4;
   cursor: pointer;
