@@ -4,6 +4,8 @@ node_modules/
 # Build outputs
 dist/
 out/
+resources/bundle.js
+resources/bundle.js.LICENSE.txt
 
 # VSCode settings (optional, per-user preference)
 .vscode/
