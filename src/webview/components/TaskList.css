@@ -5,27 +5,31 @@
   background-color: #1e1e1e;
   color: #d4d4d4;
   padding: 0 0;
+  position: relative;
 }
 
 .header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 8px 12px;
   border-bottom: 1px solid #3c3c3c;
   flex-shrink: 0;
+  gap: 8px;
 }
 
 .header h1 {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: #ffffff;
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .btn {
@@ -95,7 +99,27 @@
   overflow: hidden;
 }
 
-/* 执行中任务样式 */
+/* 【R51.9】任务高亮定位样式 */
+.task-card-highlighted {
+  border-color: #007acc !important;
+  box-shadow: 0 0 12px rgba(0, 122, 204, 0.4);
+  animation: highlightPulse 1.5s ease-in-out infinite;
+}
+
+.task-card-highlighted .task-id {
+  color: #007acc;
+  font-weight: 600;
+}
+
+@keyframes highlightPulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(0, 122, 204, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(0, 122, 204, 0.5);
+  }
+}
+
 .task-item.processing .task-card {
   border-color: #d97706;
   box-shadow: 0 0 8px rgba(217, 119, 6, 0.3);
@@ -122,7 +146,6 @@
   gap: 8px;
 }
 
-/* 左侧可点击区域 - 包含展开图标、复选框和内容 */
 .task-main-left {
   display: flex;
   align-items: flex-start;
@@ -136,31 +159,55 @@
 }
 
 .expand-icon {
-  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  display: flex;
   align-items: center;
   justify-content: center;
+  margin-top: 1px;
   color: #888;
   font-size: 10px;
   flex-shrink: 0;
   cursor: pointer;
-  width: 16px;
-  height: 16px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
 }
 
+.expand-icon:hover {
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+}
+
+/* 折叠状态：使用灰色表示可展开 */
+.expand-icon:not(.expanded) {
+  background-color: rgba(100, 100, 100, 0.15);
+  border-color: rgba(100, 100, 100, 0.3);
+  color: #888;
+}
+
+/* 展开状态：使用绿色表示已展开 */
 .expand-icon.expanded {
   transform: rotate(90deg);
+  background-color: rgba(45, 122, 45, 0.2);
+  border-color: rgba(45, 122, 45, 0.5);
+  color: #4ade4a;
+}
+
+.expand-icon.expanded:hover {
+  background-color: rgba(45, 122, 45, 0.3);
+  border-color: rgba(45, 122, 45, 0.7);
+  color: #6ee06e;
 }
 
 .task-checkbox {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border: 2px solid #555;
   border-radius: 3px;
+  margin-top: 3px;
   flex-shrink: 0;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .task-checkbox.checked {
@@ -169,7 +216,7 @@
 }
 
 .task-checkbox.checked::after {
-  content: '✓';
+  content: "\2713";
   color: white;
   font-size: 11px;
   display: block;
@@ -185,17 +232,17 @@
 .task-id-wrapper {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 4px;
-  flex-wrap: wrap;
-  flex: 1;
-  min-width: 0;
 }
 
 .task-id {
   font-size: 11px;
   color: #6a737d;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family:
+    "Consolas",
+    "Monaco",
+    monospace;
 }
 
 .processing-badge {
@@ -226,9 +273,12 @@
   outline: none;
 }
 
-/* 【修复R22.4/R27】编辑模式使用原生textarea，高度根据内容动态调整 */
 .task-title-edit {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family:
+    "Consolas",
+    "Monaco",
+    "Courier New",
+    monospace;
   font-size: 14px;
   background-color: #1e1e1e;
   border: 1px solid #3c3c3c;
@@ -242,7 +292,7 @@
   white-space: pre-wrap;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  min-height: 0; /* 覆盖CSS默认，由JS动态控制高度 */
+  min-height: 0;
 }
 
 .task-title-edit:focus {
@@ -265,7 +315,6 @@
   color: #3794ff;
 }
 
-/* Markdown渲染元素样式 - 在非编辑模式下生效 */
 .task-title:not(.edit-mode) h1,
 .task-title:not(.edit-mode) h2,
 .task-title:not(.edit-mode) h3,
@@ -277,12 +326,27 @@
   color: #ffffff;
 }
 
-.task-title:not(.edit-mode) h1 { font-size: 16px; }
-.task-title:not(.edit-mode) h2 { font-size: 15px; }
-.task-title:not(.edit-mode) h3 { font-size: 14px; }
-.task-title:not(.edit-mode) h4 { font-size: 13px; }
+.task-title:not(.edit-mode) h1 {
+  font-size: 16px;
+}
+
+.task-title:not(.edit-mode) h2 {
+  font-size: 15px;
+}
+
+.task-title:not(.edit-mode) h3 {
+  font-size: 14px;
+}
+
+.task-title:not(.edit-mode) h4 {
+  font-size: 13px;
+}
+
 .task-title:not(.edit-mode) h5,
-.task-title:not(.edit-mode) h6 { font-size: 12px; color: #888; }
+.task-title:not(.edit-mode) h6 {
+  font-size: 12px;
+  color: #888;
+}
 
 .task-title:not(.edit-mode) p {
   margin: 4px 0;
@@ -356,37 +420,24 @@
 .task-actions {
   flex-shrink: 0;
   display: flex;
-  gap: 4px;
+  gap: 6px;
   justify-content: flex-end;
   margin-top: 4px;
 }
 
-/* 内联按钮样式 - 放在task-id-wrapper右侧 */
-.task-actions-inline {
-  display: flex;
-  gap: 4px; /* 增加一点间距 */
-  align-items: center;
-  margin-left: auto; /* 右对齐 */
-}
-
 .action-btn {
-  padding: 3px 5px; /* 增加内边距 */
-  border: 1px solid #454545; /* 增加框线 */
+  padding: 4px 10px;
+  border: none;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 11px;
-  background-color: #2d2d2d; /* 增加背景色 */
-  color: #cccccc;
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 12px;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  transition: background-color 0.15s;
 }
 
 .action-btn:hover {
-  background-color: #3e3e3e;
-  border-color: #555555;
-  color: #ffffff;
+  background-color: #4c4c4c;
 }
 
 .action-btn.active {
@@ -403,114 +454,29 @@
 }
 
 .action-btn.claude-btn {
-  background-color: transparent;
-  color: #d97706;
+  background-color: #d97706;
+  color: white;
 }
 
 .action-btn.claude-btn:hover {
-  background-color: rgba(217, 119, 6, 0.2);
-  color: #fbbf24;
+  background-color: #b45309;
 }
 
 .action-btn.claude-btn.disabled,
 .action-btn.claude-btn:disabled {
-  background-color: transparent;
-  color: #6b5b3d;
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-/* 【实现R46】延续按钮样式 */
-.action-btn.continue-btn {
-  background-color: transparent;
-  color: #2d7a2d;
-}
-
-.action-btn.continue-btn:hover {
-  background-color: rgba(45, 122, 45, 0.2);
-  color: #4ade4a;
-}
-
-.action-btn.continue-btn.disabled,
-.action-btn.continue-btn:disabled {
-  background-color: transparent;
-  color: #2a4a2a;
+  background-color: #6b5b3d;
+  color: #999;
   cursor: not-allowed;
   opacity: 0.7;
 }
 
 .children {
-  margin-left: 6px;
+  margin-left: 24px;
   border-left: 1px solid #3c3c3c;
-  padding-left: 4px;
+  padding-left: 16px;
   padding-top: 8px;
   overflow: hidden;
   transition: max-height 0.2s ease-out;
-}
-
-/* 【实现R48.1】收起状态下的子任务区域样式 - 添加滚动条 */
-.children.collapsed-preview {
-  overflow-y: auto !important;
-  scrollbar-width: thin;
-  scrollbar-color: #424242 #1e1e1e;
-  padding-bottom: 10px; /* 【修复R50.5】添加底部padding，避免滚动到底部时被遮挡 */
-  position: relative;
-}
-
-/* 【实现R51.3】滚动阴影样式 - 使用sticky定位避免被overflow裁剪 */
-.scroll-shadow-top {
-  position: sticky;
-  top: -8px; /* 抵消父元素的 padding-top */
-  left: 0;
-  right: 0;
-  height: 48px; /* 40px + 8px padding */
-  background: linear-gradient(to bottom, rgba(20, 20, 20, 0.9), rgba(20, 20, 20, 0.4), transparent);
-  opacity: 0;
-  pointer-events: none;
-  z-index: 5;
-  transition: opacity 0.15s ease;
-  margin-bottom: -48px;
-}
-
-.scroll-shadow-bottom {
-  position: sticky;
-  bottom: -12px; /* 抵消父元素的 padding-bottom */
-  left: 0;
-  right: 0;
-  height: 52px; /* 40px + 12px */
-  background: linear-gradient(to top, rgba(20, 20, 20, 0.9), rgba(20, 20, 20, 0.4), transparent);
-  opacity: 0;
-  pointer-events: none;
-  z-index: 5;
-  transition: opacity 0.15s ease;
-  margin-top: -52px;
-}
-
-.children.collapsed-preview.can-scroll-up .scroll-shadow-top {
-  opacity: 1;
-}
-
-.children.collapsed-preview.can-scroll-down .scroll-shadow-bottom {
-  opacity: 1;
-}
-
-/* 收起状态下的滚动条样式 - Webkit浏览器 */
-.children.collapsed-preview::-webkit-scrollbar {
-  width: 6px;
-}
-
-.children.collapsed-preview::-webkit-scrollbar-track {
-  background: #1e1e1e;
-  border-radius: 3px;
-}
-
-.children.collapsed-preview::-webkit-scrollbar-thumb {
-  background: #424242;
-  border-radius: 3px;
-}
-
-.children.collapsed-preview::-webkit-scrollbar-thumb:hover {
-  background: #555;
 }
 
 .children.collapsed {
@@ -534,7 +500,6 @@
   max-width: 400px;
 }
 
-/* 现代细滚动条样式 */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -577,161 +542,15 @@
 }
 
 .delete-btn {
-  background-color: transparent !important;
-  color: #888 !important;
+  background-color: #c0392b !important;
+  color: white !important;
 }
 
 .delete-btn:hover {
-  background-color: rgba(192, 57, 43, 0.2) !important;
-  color: #e74c3c !important;
+  background-color: #e74c3c !important;
 }
 
-/* 筛选栏样式 - 浮动在顶部 */
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 12px;
-  background-color: #1e1e1e;
-  border-bottom: 1px solid #3c3c3c;
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-label {
-  font-size: 12px;
-  color: #888;
-  white-space: nowrap;
-}
-
-.filter-buttons {
-  display: flex;
-  gap: 4px;
-}
-
-.filter-btn {
-  padding: 4px 12px;
-  border: 1px solid #3c3c3c;
-  border-radius: 4px;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.filter-btn:hover {
-  background-color: #3c3c3c;
-}
-
-.filter-btn.active {
-  background-color: #007acc;
-  border-color: #007acc;
-  color: white;
-}
-
-.search-input {
-  padding: 6px 12px;
-  border: 1px solid #3c3c3c;
-  border-radius: 4px;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
-  font-size: 13px;
-  width: 180px;
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-
-.search-input:focus {
-  border-color: #007acc;
-}
-
-.search-input::placeholder {
-  color: #666;
-}
-
-.clear-search-btn {
-  padding: 4px 8px;
-  border: none;
-  border-radius: 4px;
-  background-color: #3c3c3c;
-  color: #d4d4d4;
-  font-size: 16px;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-  line-height: 1;
-}
-
-.clear-search-btn:hover {
-  background-color: #c0392b;
-}
-
-.clear-filter-btn {
-  padding: 4px 12px;
-  border: 1px solid #c0392b;
-  border-radius: 4px;
-  background-color: transparent;
-  color: #e74c3c;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.clear-filter-btn:hover {
-  background-color: #c0392b;
-  color: white;
-}
-
-/* 筛选栏内的添加任务按钮 */
-.add-task-btn {
-  padding: 4px 12px !important;
-  font-size: 12px !important;
-}
-
-.filter-stats {
-  font-size: 12px;
-  color: #888;
-  margin-left: auto;
-  white-space: nowrap;
-}
-
-/* 【实现R28】任务跳转下拉菜单样式 */
-.jump-select {
-  padding: 6px 12px;
-  border: 1px solid #3c3c3c;
-  border-radius: 4px;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
-  font-size: 13px;
-  outline: none;
-  cursor: pointer;
-  min-width: 120px;
-  transition: border-color 0.15s ease;
-}
-
-.jump-select:focus {
-  border-color: #007acc;
-}
-
-.jump-select:hover {
-  border-color: #555;
-}
-
-.jump-select option {
-  background-color: #1e1e1e;
-  color: #d4d4d4;
-  padding: 8px;
-}
-
-/* 【实现R29.2】双向滚动同步开关按钮样式 */
+/* 同步滚动按钮样式 */
 .sync-scroll-btn {
   padding: 6px;
   border: 1px solid #3c3c3c;
@@ -762,11 +581,10 @@
 }
 
 .sync-scroll-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
-/* 【R37.2】工具栏图标按钮样式 */
 .toolbar-icon-btn {
   padding: 6px;
   border: 1px solid #3c3c3c;
@@ -794,23 +612,46 @@
 }
 
 .toolbar-icon-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
-/* 【实现R37.3.1】跳转到下一个按钮包装器，用于定位徽章 */
+/* 【R51.10】全部展开/收起合并按钮样式 */
+.expand-collapse-btn {
+  background-color: rgba(100, 100, 100, 0.15);
+  border-color: rgba(100, 100, 100, 0.3);
+  color: #888;
+}
+
+.expand-collapse-btn:hover {
+  background-color: rgba(100, 100, 100, 0.25);
+  color: #d4d4d4;
+}
+
+.expand-collapse-btn.expanded {
+  background-color: rgba(45, 122, 45, 0.2);
+  border-color: rgba(45, 122, 45, 0.5);
+  color: #4ade4a;
+}
+
+.expand-collapse-btn.expanded:hover {
+  background-color: rgba(45, 122, 45, 0.3);
+  border-color: rgba(45, 122, 45, 0.7);
+  color: #6ee06e;
+}
+
 .jump-next-btn-wrapper {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
-/* 【实现R37.3.1】数字徽章样式 */
 .jump-next-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -6px;
+  right: -6px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
@@ -827,44 +668,318 @@
   z-index: 10;
 }
 
-/* 【实现R39】链接状态图标样式 */
-.link-status-icon {
-  display: inline-flex;
+/* 浮动筛选栏样式 */
+.floating-filter-bar {
+  pointer-events: auto;
+}
+
+.filter-row {
+  display: flex;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 12px;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.filter-buttons {
+  display: flex;
   gap: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: help;
+}
+
+.filter-btn {
+  padding: 4px 10px;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  background-color: #1e1e1e;
+  color: #888;
   transition: all 0.15s ease;
 }
 
-/* 全部链接存在时的样式 - 绿色 */
-.link-status-icon.link-complete {
-  background-color: rgba(45, 122, 45, 0.2);
-  border: 1px solid #2d7a2d;
-  color: #4ade4a;
+.filter-btn:hover {
+  background-color: #3c3c3c;
+  color: #d4d4d4;
 }
 
-/* 部分链接存在时的样式 - 黄色/橙色 */
-.link-status-icon.link-partial {
-  background-color: rgba(217, 119, 6, 0.2);
+.filter-btn.active {
+  background-color: #007acc;
+  border-color: #007acc;
+  color: white;
+}
+
+.search-group {
+  display: flex;
+  align-items: center;
+  position: relative;
+  flex: 1;
+  min-width: 120px;
+  max-width: 200px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 6px 30px 6px 10px;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  font-size: 12px;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #007acc;
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+}
+
+.search-input::placeholder {
+  color: #666;
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: #3c3c3c;
+  color: #888;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.clear-search-btn:hover {
+  background-color: #4c4c4c;
+  color: #d4d4d4;
+}
+
+.jump-select {
+  padding: 5px 8px;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  font-size: 12px;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  cursor: pointer;
+  outline: none;
+  min-width: 80px;
+  max-width: 100px;
+}
+
+.jump-select:focus {
+  border-color: #007acc;
+}
+
+.clear-filter-btn {
+  padding: 4px 10px;
   border: 1px solid #d97706;
-  color: #fbbf24;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  background-color: transparent;
+  color: #d97706;
+  transition: all 0.15s ease;
 }
 
-/* 悬停效果 */
-.link-status-icon:hover {
-  filter: brightness(1.1);
+.clear-filter-btn:hover {
+  background-color: #d97706;
+  color: white;
 }
 
-/* 链接计数文字 */
-.link-count {
-  font-family: 'Consolas', 'Monaco', monospace;
+.add-task-btn {
+  margin-left: auto;
 }
 
-/* 【R13.5】普通文本块样式 */
+.filter-stats {
+  font-size: 11px;
+  color: #888;
+  flex: 1;
+}
+
+/* 标题栏下拉菜单样式 */
+.header-dropdown {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+/* 【R51.16】调高下拉框高度与图标按钮一致 */
+.header-select {
+  appearance: none;
+  padding: 6px 20px 6px 8px;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  font-size: 11px;
+  height: 26px;
+  background-color: #2d2d2d;
+  color: #d4d4d4;
+  cursor: pointer;
+  outline: none;
+  min-width: 50px;
+  max-width: 70px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.header-select:focus {
+  border-color: #007acc;
+  background-color: #1e1e1e;
+}
+
+.header-select:hover {
+  border-color: #4c4c4c;
+  background-color: #383838;
+}
+
+/* 标题栏搜索框样式 */
+.header-search {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 【R51.16】调高搜索框高度与图标按钮一致 */
+.header-search-input {
+  width: 100px;
+  padding: 6px 8px;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  font-size: 11px;
+  background-color: #2d2d2d;
+  color: #d4d4d4;
+  outline: none;
+}
+
+.header-search-input:focus {
+  border-color: #007acc;
+  background-color: #1e1e1e;
+}
+
+.header-search-input::placeholder {
+  color: #666;
+}
+
+.search-clear-btn {
+  padding: 2px 5px;
+  border: none;
+  border-radius: 3px;
+  background-color: #3c3c3c;
+  color: #888;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.search-clear-btn:hover {
+  background-color: #4c4c4c;
+  color: #d4d4d4;
+}
+
+/* 添加任务按钮在标题栏的样式 - 【R51.11】改为与其他toolbar-icon-btn一致的风格 */
+.add-task-header-btn {
+  background-color: #1e1e1e;
+  color: #888;
+  border: 1px solid #3c3c3c;
+}
+
+.add-task-header-btn:hover {
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+}
+
+.add-task-header-btn.disabled,
+.add-task-header-btn:disabled {
+  background-color: #2c2c2c;
+  color: #666;
+  border-color: #3c3c3c;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* 工具栏按钮激活状态 */
+.toolbar-icon-btn.active {
+  background-color: #007acc;
+  border-color: #007acc;
+  color: white;
+}
+
+/* 【R51.16】调高筛选下拉框高度与图标按钮一致 */
+.filter-dropdown {
+  appearance: none;
+  padding: 6px 20px 6px 8px;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  font-size: 11px;
+  height: 26px;
+  background-color: #2d2d2d;
+  color: #d4d4d4;
+  cursor: pointer;
+  outline: none;
+  min-width: 70px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.filter-dropdown:focus {
+  border-color: #007acc;
+  background-color: #1e1e1e;
+}
+
+.filter-dropdown:hover {
+  border-color: #4c4c4c;
+  background-color: #383838;
+}
+
+/* 清除筛选按钮样式 */
+.clear-filter-btn.toolbar-icon-btn {
+  padding: 6px;
+  border: 1px solid #d97706;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #d97706;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.clear-filter-btn.toolbar-icon-btn:hover {
+  background-color: #d97706;
+  color: white;
+}
+
+/* 统计信息样式 */
+.stats {
+  font-size: 12px;
+  color: #888;
+}
+
+/* 普通文本块样式 */
 .text-block {
   cursor: text;
   transition: background-color 0.15s ease;
@@ -874,7 +989,7 @@
   background-color: #333333;
 }
 
-/* 【R13.5】普通文本块内容区域样式 */
+/* 普通文本块内容区域样式 */
 .textblock-content {
   min-height: 20px;
   outline: none;
@@ -893,9 +1008,9 @@
   font-size: 12px;
 }
 
-/* 【R13.5】普通文本块编辑模式样式 */
+/* 普通文本块编辑模式样式 */
 .textblock-content-edit {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 13px;
   background-color: #1e1e1e;
   border: 1px solid #3c3c3c;
@@ -980,4 +1095,128 @@
   padding: 0;
   font-size: 12px;
   color: #d4d4d4;
+}
+
+/* 滚动阴影样式 */
+.scroll-shadow-top {
+  position: sticky;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: linear-gradient(to bottom, rgba(20, 20, 20, 0.9), rgba(20, 20, 20, 0.4), transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.15s ease;
+  margin-bottom: -48px;
+}
+
+.scroll-shadow-bottom {
+  position: sticky;
+  bottom: -12px;
+  left: 0;
+  right: 0;
+  height: 52px;
+  background: linear-gradient(to top, rgba(20, 20, 20, 0.9), rgba(20, 20, 20, 0.4), transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.15s ease;
+  margin-top: -52px;
+}
+
+.children.collapsed-preview.can-scroll-up .scroll-shadow-top {
+  opacity: 1;
+}
+
+.children.collapsed-preview.can-scroll-down .scroll-shadow-bottom {
+  opacity: 1;
+}
+
+/* 链接状态图标样式 */
+.link-status-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: help;
+  transition: all 0.15s ease;
+}
+
+.link-status-icon.link-complete {
+  background-color: rgba(45, 122, 45, 0.2);
+  border: 1px solid #2d7a2d;
+  color: #4ade4a;
+}
+
+.link-status-icon.link-partial {
+  background-color: rgba(217, 119, 6, 0.2);
+  border: 1px solid #d97706;
+  color: #fbbf24;
+}
+
+.link-status-icon:hover {
+  filter: brightness(1.1);
+}
+
+.link-count {
+  font-family: "Consolas", "Monaco", monospace;
+}
+
+/* 任务内联按钮容器 */
+.task-actions-inline {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+}
+
+/* 延续按钮样式 */
+.action-btn.continue-btn {
+  background-color: transparent;
+  color: #2d7a2d;
+}
+
+.action-btn.continue-btn:hover {
+  background-color: rgba(45, 122, 45, 0.2);
+  color: #4ade4a;
+}
+
+.action-btn.continue-btn.disabled,
+.action-btn.continue-btn:disabled {
+  background-color: transparent;
+  color: #2a4a2a;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* 收起状态下的子任务区域样式 */
+.children.collapsed-preview {
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: #424242 #1e1e1e;
+  padding-bottom: 10px;
+  position: relative;
+}
+
+.children.collapsed-preview::-webkit-scrollbar {
+  width: 6px;
+}
+
+.children.collapsed-preview::-webkit-scrollbar-track {
+  background: #1e1e1e;
+  border-radius: 3px;
+}
+
+.children.collapsed-preview::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 3px;
+}
+
+.children.collapsed-preview::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }

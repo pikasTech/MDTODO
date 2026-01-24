@@ -28,3 +28,5 @@ coverage/
 *.tmp
 *.temp
 nul
+resources/bundle.js
+resources/bundle.js.LICENSE.txt
