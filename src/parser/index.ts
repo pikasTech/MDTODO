@@ -117,7 +117,7 @@ export class TodoParser {
   /**
    * 解析并收集普通文本块（非RXX格式的标题及其后续内容）
    * 将连续的普通文本内容合并为一个 TextBlock
-   * 正确处理代码块，不会将代码块内容混入普通文本块
+   * 代码块内容作为普通文本块的一部分渲染
    * 空行保留在文本块中，不作为分隔符
    * 只识别任务标题之间的非RXX内容为文本块，不包括任务描述
    */
@@ -128,25 +128,11 @@ export class TodoParser {
     let currentBlockLines: string[] = [];
     let blockStartLine = -1;
     let inTextBlock = false;
-    let inCodeBlock = false;  // 跟踪是否在代码块内
     let foundFirstTask = false;  // 标记是否遇到了第一个 RXX 任务
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trim();
-
-      // 检测代码块边界
-      if (trimmed.startsWith('```')) {
-        // 如果在代码块内，结束代码块；如果不在，开始代码块
-        inCodeBlock = !inCodeBlock;
-        // 代码块不作为普通文本内容
-        continue;
-      }
-
-      // 如果在代码块内，跳过
-      if (inCodeBlock) {
-        continue;
-      }
 
       // 检查是否是 ## 或 ### 或 #### 开头
       const isHeading = trimmed.match(/^#{2,}\s/);
@@ -189,15 +175,15 @@ export class TodoParser {
           currentBlockLines.push(line);
         }
         // 如果不在文本块中，但遇到了空行，也开始一个文本块（内容可能从下一行开始）
-        else if (!foundFirstTask && !inCodeBlock) {
+        else if (!foundFirstTask) {
           inTextBlock = true;
           blockStartLine = i;
         }
       }
     }
 
-    // 处理最后一个文本块（如果不在代码块内且有内容）
-    if (!inCodeBlock && inTextBlock && currentBlockLines.length > 0) {
+    // 处理最后一个文本块（如果有内容）
+    if (inTextBlock && currentBlockLines.length > 0) {
       // 【R13.5】保存原始内容用于编辑
       textBlocks.push({
         id: `text-${blockStartLine}`,
