@@ -1150,7 +1150,7 @@ export class TodoWebviewProvider {
 
   /**
    * 处理Claude执行（来自Webview）
-   * 添加 [Processing] 标记到任务，并在执行完成后移除
+   * 添加 [in_progress] 标记到任务，并在执行完成后移除
    */
   private async handleClaudeExecute(taskId: string): Promise<void> {
     if (!this.currentFilePath) {
@@ -1159,7 +1159,7 @@ export class TodoWebviewProvider {
     }
 
     try {
-      // 1. 添加 [Processing] 标记
+      // 1. 添加 [in_progress] 标记
       await this.markTaskAsProcessing(taskId, true);
       // 刷新显示
       await this.loadFile(this.currentFilePath);
@@ -1167,12 +1167,12 @@ export class TodoWebviewProvider {
       // 2. 执行 Claude 任务
       await this.handleExecuteTask(taskId);
 
-      // 3. 执行完成后移除 [Processing] 标记
+      // 3. 执行完成后移除 [in_progress] 标记
       // 注意：由于 Claude 是异步执行的，这里不等待，直接返回
       // 用户可以手动点击完成来标记任务完成
       // 或者实现一个机制来检测 Claude 执行完成
     } catch (error: any) {
-      // 如果执行失败，也移除 [Processing] 标记
+      // 如果执行失败，也移除 [in_progress] 标记
       await this.markTaskAsProcessing(taskId, false);
       await this.loadFile(this.currentFilePath);
       console.error('[MDTODO] Error in Claude execute:', error);
@@ -1181,7 +1181,7 @@ export class TodoWebviewProvider {
   }
 
   /**
-   * 设置任务的 [Processing] 状态
+   * 设置任务的 [in_progress] 状态
    */
   private async markTaskAsProcessing(taskId: string, isProcessing: boolean): Promise<void> {
     const fileService = new FileService();
@@ -1193,7 +1193,7 @@ export class TodoWebviewProvider {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       // 必须匹配 ## 或 ### 或 #### 开头的任务标题行，使用精确匹配避免匹配到描述行
-      // 格式如: ## R17, ### R17.1, #### R17.1.1, ## R17 [Finished]
+      // 格式如: ## R17, ### R17.1, #### R17.1.1, ## R17 [completed]
       // 【修复R43】支持更多级别的标题（2-6个#），以匹配多级任务如 R1.1.1
       const taskHeaderPattern = new RegExp(`^#{2,6}\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
       if (taskHeaderPattern.test(line)) {
@@ -1203,50 +1203,50 @@ export class TodoWebviewProvider {
     }
 
     if (taskLineIndex === -1) {
-      console.warn(`[MDTODO] 未找到任务 ${taskId}，无法设置 Processing 状态`);
+      console.warn(`[MDTODO] 未找到任务 ${taskId}，无法设置 in_progress 状态`);
       return;
     }
 
     const line = lines[taskLineIndex];
-    const hasFinished = line.includes('[Finished]');
-    const hasProcessing = line.includes('[Processing]');
+    const hasCompleted = line.includes('[completed]');
+    const hasInProgress = line.includes('[in_progress]');
 
-    // 如果已经有 [Finished]，不添加 [Processing]
-    if (hasFinished) {
-      console.warn(`[MDTODO] 任务 ${taskId} 已完成，不添加 Processing 标记`);
+    // 如果已经有 [completed]，不添加 [in_progress]
+    if (hasCompleted) {
+      console.warn(`[MDTODO] 任务 ${taskId} 已完成，不添加 in_progress 标记`);
       return;
     }
 
     // 如果状态已经是我们要设置的状态，不做修改
-    if (isProcessing && hasProcessing) return;
-    if (!isProcessing && !hasProcessing) return;
+    if (isProcessing && hasInProgress) return;
+    if (!isProcessing && !hasInProgress) return;
 
-    // 添加或移除 [Processing] 标记
-    // 任务行格式如: ## R17, ### R17.1, ## R17 [Finished]
-    // [Processing] 应该添加在任务ID之后，其他标记之前
+    // 添加或移除 [in_progress] 标记
+    // 任务行格式如: ## R17, ### R17.1, ## R17 [completed]
+    // [in_progress] 应该添加在任务ID之后，其他标记之前
     if (isProcessing) {
-      // 在任务ID后添加 [Processing]，在可能存在的 [Finished] 之前
+      // 在任务ID后添加 [in_progress]，在可能存在的 [completed] 之前
       const taskIdPattern = new RegExp(`(${taskId.replace(/\./g, '\\.')})(\\s*\\[)`);
       if (taskIdPattern.test(line)) {
-        // 有其他标记（如 [Finished]），在ID和标记之间插入
-        lines[taskLineIndex] = line.replace(taskIdPattern, '$1 [Processing]$2');
+        // 有其他标记（如 [completed]），在ID和标记之间插入
+        lines[taskLineIndex] = line.replace(taskIdPattern, '$1 [in_progress]$2');
       } else {
         // 没有其他标记，直接在ID后添加
-        lines[taskLineIndex] = line.replace(taskIdPattern, '$1 [Processing]$2');
+        lines[taskLineIndex] = line.replace(taskIdPattern, '$1 [in_progress]$2');
         // 如果上面的替换没生效（可能ID不在最后），尝试简单替换
         if (lines[taskLineIndex] === line) {
           const simplePattern = new RegExp(`(${taskId.replace(/\./g, '\\.')})(\\s*)$`);
-          lines[taskLineIndex] = line.replace(simplePattern, '$1 [Processing]$2');
+          lines[taskLineIndex] = line.replace(simplePattern, '$1 [in_progress]$2');
         }
       }
     } else {
-      // 移除 [Processing] 标记
-      lines[taskLineIndex] = line.replace(/\s*\[Processing\]/, '');
+      // 移除 [in_progress] 标记
+      lines[taskLineIndex] = line.replace(/\s*\[in_progress\]/, '');
     }
 
     const newContent = lines.join('\n');
     await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-    console.log(`[MDTODO] 任务 ${taskId} Processing状态设置为: ${isProcessing}`);
+    console.log(`[MDTODO] 任务 ${taskId} in_progress状态设置为: ${isProcessing}`);
   }
 
   /**
@@ -1277,8 +1277,8 @@ export class TodoWebviewProvider {
   }
 
   /**
-   * 设置任务的 [Finished] 状态
-   * 添加或移除 [Finished] 标记，支持处理 [Processing] 标记
+   * 设置任务的 [completed] 状态
+   * 添加或移除 [completed] 标记，支持处理 [in_progress] 标记
    * 【R26.2】允许在 Processing 状态下标记完成，同时移除 Processing 标记
    */
   private async markTaskAsFinished(taskId: string, isFinished: boolean): Promise<void> {
@@ -1291,7 +1291,7 @@ export class TodoWebviewProvider {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       // 必须匹配 ## 或 ### 或 #### 开头的任务标题行，使用精确匹配避免匹配到描述行
-      // 格式如: ## R26, ### R26.1, #### R26.1.1, ## R26 [Finished], ## R26 [Processing]
+      // 格式如: ## R26, ### R26.1, #### R26.1.1, ## R26 [completed], ## R26 [in_progress]
       // 【修复R43】支持更多级别的标题（2-6个#），以匹配多级任务如 R1.1.1
       const taskHeaderPattern = new RegExp(`^#{2,6}\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
       if (taskHeaderPattern.test(line)) {
@@ -1301,46 +1301,46 @@ export class TodoWebviewProvider {
     }
 
     if (taskLineIndex === -1) {
-      console.warn(`[MDTODO] 未找到任务 ${taskId}，无法设置 Finished 状态`);
+      console.warn(`[MDTODO] 未找到任务 ${taskId}，无法设置 completed 状态`);
       return;
     }
 
     const line = lines[taskLineIndex];
-    const hasFinished = line.includes('[Finished]');
-    const hasProcessing = line.includes('[Processing]');
+    const hasCompleted = line.includes('[completed]');
+    const hasInProgress = line.includes('[in_progress]');
 
     // 如果状态已经是我们要设置的状态，不做修改
-    if (isFinished && hasFinished) return;
-    if (!isFinished && !hasFinished) return;
+    if (isFinished && hasCompleted) return;
+    if (!isFinished && !hasCompleted) return;
 
     // 【R26.2】允许在 Processing 状态下标记完成，同时移除 Processing 标记
-    // 不再检查 hasProcessing，允许用户直接完成任务
+    // 不再检查 hasInProgress，允许用户直接完成任务
 
-    // 添加或移除 [Finished] 标记
-    // 任务行格式如: ## R26, ### R26.1, ## R26 [Processing]
-    // 【R26.2】[Finished] 应该添加在任务ID之后，同时移除 [Processing] 标记
+    // 添加或移除 [completed] 标记
+    // 任务行格式如: ## R26, ### R26.1, ## R26 [in_progress]
+    // 【R26.2】[completed] 应该添加在任务ID之后，同时移除 [in_progress] 标记
     if (isFinished) {
-      // 在任务ID后添加 [Finished]，并移除 [Processing] 标记
+      // 在任务ID后添加 [completed]，并移除 [in_progress] 标记
       let newLine = line;
 
-      // 如果有 [Processing] 标记，先移除它
-      if (hasProcessing) {
-        newLine = newLine.replace(/\s*\[Processing\]/, '');
+      // 如果有 [in_progress] 标记，先移除它
+      if (hasInProgress) {
+        newLine = newLine.replace(/\s*\[in_progress\]/, '');
       }
 
-      // 然后添加 [Finished] 标记
+      // 然后添加 [completed] 标记
       const taskIdPattern = new RegExp(`(${taskId.replace(/\./g, '\\.')})(\\s*)$`);
-      newLine = newLine.replace(taskIdPattern, '$1 [Finished]');
+      newLine = newLine.replace(taskIdPattern, '$1 [completed]');
 
       lines[taskLineIndex] = newLine;
     } else {
-      // 移除 [Finished] 标记
-      lines[taskLineIndex] = line.replace(/\s*\[Finished\]/, '');
+      // 移除 [completed] 标记
+      lines[taskLineIndex] = line.replace(/\s*\[completed\]/, '');
     }
 
     const newContent = lines.join('\n');
     await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-    console.log(`[MDTODO] 任务 ${taskId} Finished状态设置为: ${isFinished}`);
+    console.log(`[MDTODO] 任务 ${taskId} completed状态设置为: ${isFinished}`);
   }
 
   /**
@@ -1395,7 +1395,7 @@ export class TodoWebviewProvider {
       const lines = content.split('\n');
 
       // 找到最后一个任务的位置，在其后添加新任务
-      // 注意：不再跳过 [Finished] 的任务，因为已完成的任务也是文件中的最后一个任务
+      // 注意：不再跳过 [completed] 的任务，因为已完成的任务也是文件中的最后一个任务
       let lastTaskEnd = lines.length;
       for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i].trim();
@@ -1404,7 +1404,7 @@ export class TodoWebviewProvider {
           lastTaskEnd = i;
           for (let j = i + 1; j < lines.length; j++) {
             const nextLine = lines[j].trim();
-            // 检查是否是任务标题行（包含 [Finished] 的也算）
+            // 检查是否是任务标题行（包含 [completed] 的也算）
             if (nextLine.match(/^##+\s+/) && nextLine.match(/R\d+(?:\.\d+)*/)) {
               lastTaskEnd = j;
               break;
@@ -1447,7 +1447,7 @@ export class TodoWebviewProvider {
    * 处理删除任务
    * 修复：
    * 1. 使用精确的任务ID匹配（避免 R1 误匹配 R10 或 R4.1）
-   * 2. 基于层级判断边界，不再跳过 [Finished] 状态的任务
+   * 2. 基于层级判断边界，不再跳过 [completed] 状态的任务
    */
   private async handleDeleteTask(taskId: string): Promise<void> {
     if (!this.currentFilePath) {
@@ -1478,7 +1478,7 @@ export class TodoWebviewProvider {
           // 查找下一个同级或更高级别任务标题或文件结束
           for (let j = i + 1; j < lines.length; j++) {
             const nextLine = lines[j].trim();
-            // 检查是否是任务标题行（不再跳过 [Finished] 状态的任务）
+            // 检查是否是任务标题行（不再跳过 [completed] 状态的任务）
             if (nextLine.match(/^##+\s+/) && nextLine.match(/R\d+(?:\.\d+)*/)) {
               const nextMatch = nextLine.match(/^(#+)/);
               const nextLevel = nextMatch ? nextMatch[1].length : 2;

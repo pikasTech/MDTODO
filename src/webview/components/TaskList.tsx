@@ -1,8 +1,21 @@
 import * as React from 'react';
 import { marked } from 'marked';
+import markedKatex from 'marked-katex-extension';
+import 'katex/dist/katex.min.css';
 import './TaskList.css';
 
 // Configure marked options for better rendering
+marked.use(markedKatex as any, {
+  throwOnError: false,
+  output: 'html', // 确保输出为 HTML，避免后续 DOM 修改
+  delimiters: [
+    { left: '$$', right: '$$', display: true },
+    { left: '$', right: '$', display: false },
+    { left: '\\(', right: '\\)', display: false },
+    { left: '\\[', right: '\\]', display: true }
+  ]
+});
+
 marked.setOptions({
   breaks: true, // Convert \n to <br>
   gfm: true,    // Enable GitHub Flavored Markdown
@@ -318,10 +331,11 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     return result;
   };
 
-  // 【实现R37.3.1】计算未完成任务的数量（在getAllTasks之后定义，避免初始化顺序问题）
+  // 【实现R37.3.1】【R51.18修改】计算未完成任务的数量（在getAllTasks之后定义，避免初始化顺序问题）
+  // 【R51.18】进行中的任务也当作未完成支持跳转
   const incompleteCount = React.useMemo(() => {
     const allTasks = getAllTasks(tasks);
-    return allTasks.filter(t => !t.completed && !t.processing).length;
+    return allTasks.filter(t => !t.completed).length;
   }, [tasks]);
 
   const handleToggleExpand = (taskId: string) => {
@@ -863,13 +877,13 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       console.log('[Webview] 下一个按钮防抖，跳过重复点击');
       return;
     }
-    // 获取所有任务（未完成 + 未进行中）
+    // 【R51.18修改】获取所有任务（只排除已完成，进行中的也算未完成）
     const allTasks = getAllTasks(tasks);
-    const incompleteTasks = allTasks.filter(t => !t.completed && !t.processing);
+    const incompleteTasks = allTasks.filter(t => !t.completed);
 
     if (incompleteTasks.length === 0) {
-      // 没有未完成的任务，提示用户
-      console.log('[Webview] 没有未完成的任务');
+      // 没有未完成的任务（包括进行中的），提示用户
+      console.log('[Webview] 没有未完成的任务（包括进行中的）');
       setButtonCooldown(prev => ({ ...prev, [BUTTON_IDS.JUMP_TO_NEXT]: true }));
       setTimeout(() => {
         setButtonCooldown(prev => ({ ...prev, [BUTTON_IDS.JUMP_TO_NEXT]: false }));
@@ -1055,7 +1069,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
     let renderedContent;
     try {
-      renderedContent = marked.parse(content, { async: false });
+      // marked 17.x 默认是同步模式，不需要 async 选项
+      renderedContent = marked.parse(content);
     } catch (error) {
       console.error('[Webview] Markdown渲染错误:', error);
       renderedContent = escapeHtml(content);
@@ -1639,8 +1654,9 @@ const TaskItem: React.FC<{
 
   const renderContent = () => {
     // 非编辑模式下使用marked渲染Markdown
+    // marked 17.x 默认是同步模式，不需要 async 选项
     try {
-      return marked.parse(task.title, { async: false });
+      return marked.parse(task.title);
     } catch (error) {
       console.error('[Webview] Markdown渲染错误:', error);
       return escapeHtml(task.title);

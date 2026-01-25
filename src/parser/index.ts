@@ -19,7 +19,7 @@ function hasRxxId(content: string): boolean {
   // RXX 格式：R 后面跟数字，可能还有 . 和数字
   // 必须匹配：标题符号后面的 RXX（如 "## R1", "### R1.1"）
   // 或者行首直接是 RXX（如 "R1 任务"）
-  // RXX 后面可以是：空格、]（用于 [Finished]）、或者行尾
+  // RXX 后面可以是：空格、]（用于 [completed]）、或者行尾
   return /^(#{1,6}\s+)?R\d+(?:\.\d+)*(?=[\s\]]|$)/i.test(content);
 }
 
@@ -117,7 +117,7 @@ export class TodoParser {
   /**
    * 解析并收集普通文本块（非RXX格式的标题及其后续内容）
    * 将连续的普通文本内容合并为一个 TextBlock
-   * 正确处理代码块，不会将代码块内容混入普通文本块
+   * 代码块内容作为普通文本块的一部分渲染
    * 空行保留在文本块中，不作为分隔符
    * 只识别任务标题之间的非RXX内容为文本块，不包括任务描述
    */
@@ -128,25 +128,11 @@ export class TodoParser {
     let currentBlockLines: string[] = [];
     let blockStartLine = -1;
     let inTextBlock = false;
-    let inCodeBlock = false;  // 跟踪是否在代码块内
     let foundFirstTask = false;  // 标记是否遇到了第一个 RXX 任务
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trim();
-
-      // 检测代码块边界
-      if (trimmed.startsWith('```')) {
-        // 如果在代码块内，结束代码块；如果不在，开始代码块
-        inCodeBlock = !inCodeBlock;
-        // 代码块不作为普通文本内容
-        continue;
-      }
-
-      // 如果在代码块内，跳过
-      if (inCodeBlock) {
-        continue;
-      }
 
       // 检查是否是 ## 或 ### 或 #### 开头
       const isHeading = trimmed.match(/^#{2,}\s/);
@@ -189,15 +175,15 @@ export class TodoParser {
           currentBlockLines.push(line);
         }
         // 如果不在文本块中，但遇到了空行，也开始一个文本块（内容可能从下一行开始）
-        else if (!foundFirstTask && !inCodeBlock) {
+        else if (!foundFirstTask) {
           inTextBlock = true;
           blockStartLine = i;
         }
       }
     }
 
-    // 处理最后一个文本块（如果不在代码块内且有内容）
-    if (!inCodeBlock && inTextBlock && currentBlockLines.length > 0) {
+    // 处理最后一个文本块（如果有内容）
+    if (inTextBlock && currentBlockLines.length > 0) {
       // 【R13.5】保存原始内容用于编辑
       textBlocks.push({
         id: `text-${blockStartLine}`,
@@ -256,27 +242,21 @@ export class TodoParser {
     const idMatch = content.match(/(R\d+(?:\.\d+)*)/);
     const id = idMatch ? idMatch[1] : '';
 
-    // 只检测任务行（第一个换行符之前）中是否包含 [Finished] 和 [Processing]
+    // 只检测任务行（第一个换行符之前）中是否包含新标记
     const firstNewlineIndex = content.indexOf('\n');
     const taskLine = firstNewlineIndex === -1 ? content : content.substring(0, firstNewlineIndex);
 
-    // 判断是否完成
-    const completed = taskLine.includes('[Finished]');
-    // 判断是否执行中（只检测任务行，不检测描述行）
-    const processing = taskLine.includes('[Processing]');
+    // 判断是否完成（只支持 [completed]）
+    const completed = taskLine.includes('[completed]');
+    // 判断是否执行中（只支持 [in_progress]）
+    const processing = taskLine.includes('[in_progress]');
 
-    // 提取标题：移除ID和[Finished]、[Processing]标记，保留其他markdown格式
-    // 【修复R23】不移除换行符，保留多行内容用于编辑
-    // 【修复R23.2】保留列表标记和其他markdown格式，在非编辑模式下使用marked渲染
+    // 提取标题：移除ID和标记，保留其他markdown格式
     let title = content
-      .replace(/\[Finished\]/g, '')  // 移除 [Finished]
-      .replace(/\[Processing\]/g, '')  // 移除 [Processing]
+      .replace(/\[completed\]/g, '')  // 移除 [completed]
+      .replace(/\[in_progress\]/g, '')  // 移除 [in_progress]
       .replace(/(R\d+(?:\.\d+)*)/, '')  // 移除任务ID
       .replace(/^##?\s*/, '')  // 移除开头的 ##
-      .replace(/`([^`]+)`/g, '$1')  // 移除行内代码标记
-      .replace(/\*\*([^*]+)\*\*/g, '$1')  // 移除粗体
-      .replace(/\*([^*]+)\*/g, '$1')  // 移除斜体
-      .replace(/#{1,6}\s*/g, '')  // 移除所有等级的标题符号
       .trim();
 
     // 【修复R24】如果标题为空，保持为空字符串而不是使用ID
@@ -401,7 +381,20 @@ export class TodoParser {
   async parseFile(uri: vscode.Uri): Promise<TodoFile> {
     const data = await vscode.workspace.fs.readFile(uri);
     const decoder = new TextDecoder('utf-8');
-    const content = decoder.decode(data);
+    let content = decoder.decode(data);
+
+    // 【R54】自动转换旧标记为新标记，并直接保存文件
+    const newContent = content
+      .replace(/\[Processing\]/g, '[in_progress]')
+      .replace(/\[Finished\]/g, '[completed]');
+
+    // 如果有内容变更，直接保存文件
+    if (newContent !== content) {
+      const encoder = new TextEncoder();
+      await vscode.workspace.fs.writeFile(uri, encoder.encode(newContent));
+      content = newContent;
+    }
+
     const tasks = this.parse(content, uri.fsPath);
     const textBlocks = this.parseTextBlocks(content);
     return { filePath: uri.fsPath, tasks, textBlocks };

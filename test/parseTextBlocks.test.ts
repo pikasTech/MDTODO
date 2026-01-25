@@ -21,7 +21,7 @@ describe('parseTextBlocks Tests', () => {
 
 详见 [总需求](./details/20260120_MDTODO/R0_总需求说明.md)。
 
-## R1 [Finished]
+## R1 [completed]
 
 深入调研 VSCODE 插件开发知识。`;
 

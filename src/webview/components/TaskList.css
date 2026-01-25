@@ -120,12 +120,12 @@
   }
 }
 
-.task-item.processing .task-card {
+.task-item.processing > .task-card {
   border-color: #d97706;
   box-shadow: 0 0 8px rgba(217, 119, 6, 0.3);
 }
 
-.task-item.processing .task-checkbox {
+.task-item.processing > .task-card .task-checkbox {
   border-color: #d97706;
   animation: checkboxPulse 1.5s ease-in-out infinite;
 }

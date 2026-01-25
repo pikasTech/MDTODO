@@ -89,6 +89,7 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "@types/katex": "^0.16.7",
     "@types/marked": "^5.0.2",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
@@ -106,6 +107,8 @@
     "webpack-cli": "^5.0.0"
   },
   "dependencies": {
-    "marked": "^17.0.1"
+    "katex": "^0.16.27",
+    "marked": "^17.0.1",
+    "marked-katex-extension": "^5.1.6"
   }
 }
