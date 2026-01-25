@@ -21,7 +21,7 @@ describe('删除功能边界测试 - 使用真实MD文件', () => {
   /**
    * 改进的任务边界查找函数
    * 修复了以下问题：
-   * 1. 正确处理 [Finished] 状态的任务
+   * 1. 正确处理 [completed] 状态的任务
    * 2. 基于层级正确判断任务边界
    * 3. 正确匹配完整的任务ID（避免部分匹配）
    */
@@ -294,8 +294,8 @@ describe('删除功能Bug修复验证', () => {
         startLine = i;
         for (let j = i + 1; j < lines.length; j++) {
           const nextLine = lines[j].trim();
-          // BUG: 这里只检查没有 [Finished] 的任务，忽略了已完成的任务
-          if (nextLine.match(/^##+\s+/) && !nextLine.includes('[Finished]')) {
+          // BUG: 这里只检查没有 [completed] 的任务，忽略了已完成的任务
+          if (nextLine.match(/^##+\s+/) && !nextLine.includes('[completed]')) {
             endLine = j;
             break;
           }
@@ -330,7 +330,7 @@ describe('删除功能Bug修复验证', () => {
           if (nextLine.match(/^##+\s+/) && nextLine.match(/R\d+(?:\.\d+)*/)) {
             const nextMatch = nextLine.match(/^(#+)/);
             const nextLevel = nextMatch ? nextMatch[1].length : 2;
-            // 修复：基于层级判断，不检查 [Finished]
+            // 修复：基于层级判断，不检查 [completed]
             if (nextLevel <= level) {
               endLine = j;
               break;
@@ -351,27 +351,27 @@ describe('删除功能Bug修复验证', () => {
 
 开发一个 VSCODE 插件。
 
-## R1 [Finished]
+## R1 [completed]
 
 深入调研。
 
-## R2 [Finished]
+## R2 [completed]
 
 根据R1调研结果。
 
-## R3 [Finished]
+## R3 [completed]
 
 根据R2的规划。
 
-### R3.1 [Finished]
+### R3.1 [completed]
 
 第1阶段详细执行计划。
 
-### R3.2 [Finished]
+### R3.2 [completed]
 
 第2阶段详细执行计划。
 
-### R3.3 [Finished]
+### R3.3 [completed]
 
 第3阶段详细执行计划。
 
@@ -383,7 +383,7 @@ describe('删除功能Bug修复验证', () => {
 
 执行R3.2的第2阶段计划。
 
-## R6 [Finished]
+## R6 [completed]
 
 1. 现在的 webview 缺少增加TODO。
 
@@ -409,7 +409,7 @@ describe('删除功能Bug修复验证', () => {
     expect(fixed.startLine).toBeGreaterThanOrEqual(0);
 
     // 修复后的 endLine 应该更准确（包含所有子任务）
-    // 因为 buggy 函数会跳过 [Finished] 的任务，导致边界判断错误
+    // 因为 buggy 函数会跳过 [completed] 的任务，导致边界判断错误
     expect(fixed.endLine).toBeGreaterThanOrEqual(buggy.endLine);
   });
 

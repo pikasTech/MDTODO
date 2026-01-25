@@ -17,7 +17,7 @@ const taskHeaderPattern = new RegExp(`^#{2,3}\\s+[^\\n]*\\b${taskId.replace(/\./
 
 当任务使用 `#### R1.1.1`（4个 `#`）格式时，正则表达式 `#{2,3}` 无法匹配，导致以下功能失效：
 - 标记任务为 `[Processing]` 状态
-- 标记任务为 `[Finished]` 状态
+- 标记任务为 `[completed]` 状态
 
 ### 2. 影响范围
 
@@ -35,13 +35,13 @@ const taskHeaderPattern = new RegExp(`^#{2,3}\\s+[^\\n]*\\b${taskId.replace(/\./
 
 **修改前**:
 ```typescript
-// 格式如: ## R17, ### R17.1, ## R17 [Finished]
+// 格式如: ## R17, ### R17.1, ## R17 [completed]
 const taskHeaderPattern = new RegExp(`^#{2,3}\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
 ```
 
 **修改后**:
 ```typescript
-// 格式如: ## R17, ### R17.1, #### R17.1.1, ## R17 [Finished]
+// 格式如: ## R17, ### R17.1, #### R17.1.1, ## R17 [completed]
 // 【修复R43】支持更多级别的标题（2-6个#），以匹配多级任务如 R1.1.1
 const taskHeaderPattern = new RegExp(`^#{2,6}\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
 ```
@@ -52,13 +52,13 @@ const taskHeaderPattern = new RegExp(`^#{2,6}\\s+[^\\n]*\\b${taskId.replace(/\./
 
 **修改前**:
 ```typescript
-// 格式如: ## R26, ### R26.1, ## R26 [Finished], ## R26 [Processing]
+// 格式如: ## R26, ### R26.1, ## R26 [completed], ## R26 [Processing]
 const taskHeaderPattern = new RegExp(`^#{2,3}\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
 ```
 
 **修改后**:
 ```typescript
-// 格式如: ## R26, ### R26.1, #### R26.1.1, ## R26 [Finished], ## R26 [Processing]
+// 格式如: ## R26, ### R26.1, #### R26.1.1, ## R26 [completed], ## R26 [Processing]
 // 【修复R43】支持更多级别的标题（2-6个#），以匹配多级任务如 R1.1.1
 const taskHeaderPattern = new RegExp(`^#{2,6}\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\s]|$)`);
 ```

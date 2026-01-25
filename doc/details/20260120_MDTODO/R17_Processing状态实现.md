@@ -17,7 +17,7 @@
 **文件**: `src/parser/index.ts`
 
 - 在 `parseTask` 方法中检测 `[Processing]` 标记
-- 从标题中移除 `[Processing]` 标记（类似 `[Finished]`）
+- 从标题中移除 `[Processing]` 标记（类似 `[completed]`）
 - 将 `processing` 状态添加到返回的任务对象中
 
 ### 3. WebView Provider 更新
@@ -94,4 +94,4 @@
 ## 注意事项
 
 - `[Processing]` 标记不会自动移除，需要用户手动点击"完成"来标记任务完成并移除该标记
-- 如果任务已标记 `[Finished]`，则不会添加 `[Processing]` 标记
+- 如果任务已标记 `[completed]`，则不会添加 `[Processing]` 标记

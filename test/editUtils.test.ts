@@ -19,7 +19,7 @@ describe('文件编辑工具测试', () => {
         startLine = i;
         for (let j = i + 1; j < lines.length; j++) {
           const nextLine = lines[j].trim();
-          if (nextLine.match(/^##+\s+/) && !nextLine.includes('[Finished]')) {
+          if (nextLine.match(/^##+\s+/) && !nextLine.includes('[completed]')) {
             endLine = j;
             break;
           }
@@ -311,7 +311,7 @@ describe('文件编辑工具测试', () => {
         // 任务标题后应该是空行或另一个任务标题
         if (line.match(/^##+\s+/) && nextLine && !nextLine.match(/^##+\s+/) && nextLine !== '') {
           // 非空行紧跟在任务标题后，可能有问题
-          if (!line.includes('[Finished]')) {
+          if (!line.includes('[completed]')) {
             return { valid: false, message: `第 ${i + 1} 行任务标题后应该是空行` };
           }
         }
@@ -333,7 +333,7 @@ describe('文件编辑工具测试', () => {
     });
 
     test('已完成任务格式应通过验证', () => {
-      const content = `## R1 [Finished] 任务一`;
+      const content = `## R1 [completed] 任务一`;
       const result = validateDocumentStructure(content);
       expect(result.valid).toBe(true);
     });

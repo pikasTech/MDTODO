@@ -139,14 +139,14 @@ describe('R43 - Level-3 Task Link Click Tests', () => {
   });
 
   /**
-   * 测试6：验证标记为 [Finished] 的三级任务也能正确提取链接
+   * 测试6：验证标记为 [completed] 的三级任务也能正确提取链接
    */
   test('Should handle completed level-3 tasks with links', () => {
     const content = `## R1 一级任务
 
 ### R1.1 二级任务
 
-#### R1.1.1 [Finished] 已完成的三级任务
+#### R1.1.1 [completed] 已完成的三级任务
 报告写入 [R1.1.1](./details/R1.1.1_Report.md)`;
 
     const parser = new TodoParser();

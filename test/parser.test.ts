@@ -33,7 +33,7 @@ describe('Parser Tests', () => {
   });
 
   test('Should detect completed task', () => {
-    const content = `## R1 [Finished] 已完成任务`;
+    const content = `## R1 [completed] 已完成任务`;
 
     const parser = new TodoParser();
     const tasks = parser.parse(content, '/test/TODO.md');
@@ -98,14 +98,14 @@ describe('Parser Tests', () => {
   });
 
   test('Should parse task with full description between tasks', () => {
-    const content = `## R1 [Finished]
+    const content = `## R1 [completed]
 深入调研VSCODE插件开发知识，包括联网调研，形成调研报告。
 报告写入 [R1](./details/xxx/R1_test.md)。
 
 ## R2
 根据R1调研结果，规划开发阶段。
 
-## R3 [Finished]
+## R3 [completed]
 根据R2的规划，编写详细执行计划。`;
 
     const parser = new TodoParser();

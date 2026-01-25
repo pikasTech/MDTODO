@@ -10,7 +10,7 @@ describe('R23 编号列表编辑测试', () => {
    */
   function parseTaskContentBuggy(content: string): string {
     let title = content
-      .replace(/\[Finished\]/g, '')  // 移除 [Finished]
+      .replace(/\[Finished\]/g, '')  // 移除 [completed]
       .replace(/\[Processing\]/g, '')  // 移除 [Processing]
       .replace(/(R\d+(?:\.\d+)*)/, '')  // 移除任务ID
       .replace(/^##?\s*/, '')  // 移除开头的 ##
