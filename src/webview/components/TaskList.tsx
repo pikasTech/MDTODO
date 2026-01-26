@@ -80,6 +80,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const [textBlocks, setTextBlocks] = React.useState<TextBlock[]>(initialTextBlocks);
   // 【修复R25】添加filePath状态，用于显示当前文件路径
   const [currentFilePath, setCurrentFilePath] = React.useState<string>(filePath || '');
+  // 【R54.1.1.1】添加workspacePath状态，用于计算相对路径
+  const [workspacePath, setWorkspacePath] = React.useState<string>('');
   const [expandedTasks, setExpandedTasks] = React.useState<Set<string>>(new Set([]));
   const [editModes, setEditModes] = React.useState<Record<string, boolean>>({});
   const [stats, setStats] = React.useState({ total: 0, completed: 0 });
@@ -122,12 +124,14 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   // 【R51.9】标记跳转操作进行中，用于防止滚动到底效果干扰跳转
   const [isJumpOperationInProgress, setIsJumpOperationInProgress] = React.useState(false);
   // 【R54.1】右键菜单状态
+  // 【R54.1】【R54.2】右键菜单状态，R54.2增加taskTitle用于构造执行命令
   const [contextMenu, setContextMenu] = React.useState<{
     visible: boolean;
     x: number;
     y: number;
     href: string;
     taskId: string;
+    taskTitle?: string;
   } | null>(null);
 
   // 【R13.5】普通文本块编辑状态
@@ -247,6 +251,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         setTextBlocks(message.textBlocks || []);
         // 【修复R25】更新filePath状态
         setCurrentFilePath(message.filePath || '');
+        // 【R54.1.1.1】更新workspacePath状态，用于计算相对路径
+        setWorkspacePath(message.workspacePath || '');
         // 【实现R34】更新显示标题（从文件路径提取文件名，不带.md后缀）
         setDisplayTitle(getFileName(message.filePath || ''));
         // 【实现R48.2】默认启动时采用折叠模式，不默认展开任何任务
@@ -295,6 +301,15 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       } else if (message.type === 'scrollToTask') {
         // 【实现R29】滚动到指定任务
         handleScrollToTask(message.taskId, message.lineNumber);
+      } else if (message.type === 'executeCommandGenerated') {
+        // 【R54.3】接收生成的命令并复制到剪贴板
+        if (message.command) {
+          navigator.clipboard.writeText(message.command).then(() => {
+            console.log('[Webview] 执行命令已复制到剪贴板:', message.command);
+          }).catch(err => {
+            console.error('[Webview] 复制失败:', err);
+          });
+        }
       }
     };
 
@@ -757,28 +772,26 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     }
   };
 
-  // 【R54.1】处理任务内容中的右键点击
+  // 【R54.1】【R54.2】处理任务内容中的右键点击
   const handleTaskContentContextMenu = (e: React.MouseEvent, taskId: string) => {
     const target = e.target as HTMLElement;
 
     // 查找最近的链接元素
     const anchorElement = target.closest('a');
+    const href = anchorElement ? anchorElement.getAttribute('href') : null;
 
-    if (anchorElement) {
-      e.preventDefault();
-      e.stopPropagation();
-      const href = anchorElement.getAttribute('href');
-      if (href) {
-        // 显示右键菜单
-        setContextMenu({
-          visible: true,
-          x: e.clientX,
-          y: e.clientY,
-          href: href,
-          taskId: taskId
-        });
-      }
-    }
+    // 右键点击任务任意位置都显示菜单
+    e.preventDefault();
+    e.stopPropagation();
+
+    // 显示右键菜单
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      href: href || '',
+      taskId: taskId
+    });
   };
 
   // 【R54.1】关闭右键菜单
@@ -790,6 +803,106 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const handleDeleteLinkFile = () => {
     if (contextMenu && contextMenu.href) {
       sendMessage({ type: 'deleteLinkFile', url: contextMenu.href });
+      closeContextMenu();
+    }
+  };
+
+  // 【R54.1.1】【R54.1.1.1】复制链接绝对路径到剪贴板
+  const handleCopyLinkPath = () => {
+    if (contextMenu && contextMenu.href) {
+      // 解析链接路径
+      let linkPath = contextMenu.href;
+      if (linkPath.startsWith('file://')) {
+        linkPath = linkPath.slice(7);
+      }
+      // 解码 URL 编码的路径
+      try {
+        linkPath = decodeURIComponent(linkPath);
+      } catch (e) {
+        // 如果解码失败，保持原样
+      }
+
+      // 判断是否为相对路径（不以 / 开头，且不是 Windows 盘符）
+      const isRelativePath = !linkPath.startsWith('/') && !linkPath.match(/^[A-Za-z]:/);
+
+      let absolutePath = linkPath;
+      if (isRelativePath && currentFilePath) {
+        // 相对路径：基于当前文件路径解析为绝对路径
+        const currentDir = currentFilePath.replace(/[/\\][^/\\]*$/, '');
+        absolutePath = currentDir + '/' + linkPath;
+      }
+
+      // 将反斜杠替换为斜杠，保持路径格式一致性
+      absolutePath = absolutePath.replace(/\\/g, '/');
+
+      navigator.clipboard.writeText(absolutePath).then(() => {
+        console.log('链接绝对路径已复制到剪贴板:', absolutePath);
+      }).catch(err => {
+        console.error('复制失败:', err);
+      });
+
+      closeContextMenu();
+    }
+  };
+
+  // 【R54.1.1】【R54.1.1.1】复制链接相对路径到剪贴板（相对于 VSCode 工作区）
+  const handleCopyLinkRelativePath = () => {
+    if (contextMenu && contextMenu.href) {
+      // 解析链接路径
+      let linkPath = contextMenu.href;
+      if (linkPath.startsWith('file://')) {
+        linkPath = linkPath.slice(7);
+      }
+      // 解码 URL 编码的路径
+      try {
+        linkPath = decodeURIComponent(linkPath);
+      } catch (e) {
+        // 如果解码失败，保持原样
+      }
+
+      // 判断是否为相对路径（不以 / 开头，且不是 Windows 盘符）
+      const isRelativePath = !linkPath.startsWith('/') && !linkPath.match(/^[A-Za-z]:/);
+
+      let absolutePath = linkPath;
+      if (isRelativePath && currentFilePath) {
+        // 相对路径：基于当前文件路径解析为绝对路径
+        const currentDir = currentFilePath.replace(/[/\\][^/\\]*$/, '');
+        absolutePath = currentDir + '/' + linkPath;
+      }
+
+      // 计算相对于工作区的相对路径
+      let relativePath = absolutePath;
+      if (workspacePath && absolutePath.startsWith(workspacePath)) {
+        // 去除工作区前缀，得到相对于工作区的路径
+        relativePath = absolutePath.slice(workspacePath.length);
+        // 去除开头的斜杠
+        if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+          relativePath = relativePath.slice(1);
+        }
+      }
+
+      // 将反斜杠替换为斜杠，保持路径格式一致性
+      relativePath = relativePath.replace(/\\/g, '/');
+
+      navigator.clipboard.writeText(relativePath).then(() => {
+        console.log('链接相对路径已复制到剪贴板:', relativePath);
+      }).catch(err => {
+        console.error('复制失败:', err);
+      });
+
+      closeContextMenu();
+    }
+  };
+
+  // 【R54.2】【R54.3】复制执行命令到剪贴板
+  // R54.3修改：改为发送消息给extension，由extension的命令生成函数生成命令，确保与实际执行一致
+  const handleCopyExecuteCommand = () => {
+    if (contextMenu && contextMenu.taskId) {
+      // 发送消息给extension，请求生成执行命令
+      sendMessage({
+        type: 'generateExecuteCommand',
+        taskId: contextMenu.taskId
+      });
       closeContextMenu();
     }
   };
@@ -1465,7 +1578,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       React.createElement('span', { className: 'file-path' }, currentFilePath || '未选择文件'),
       React.createElement('span', { className: 'stats' }, `共 ${stats.total} 个任务，${stats.completed} 已完成`)
     ),
-    // 【R54.1】右键菜单
+    // 【R54.1】【R54.2】右键菜单
     contextMenu && contextMenu.visible && React.createElement('div', {
       className: 'context-menu',
       style: {
@@ -1475,7 +1588,23 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         zIndex: 10000
       }
     },
-      React.createElement('div', {
+      // 【R54.2】复制执行命令菜单项
+      contextMenu.taskId && React.createElement('div', {
+        className: 'context-menu-item',
+        onClick: handleCopyExecuteCommand
+      }, '复制执行命令'),
+      // 【R54.1.1】复制链接绝对路径菜单项（仅当存在链接时显示）
+      contextMenu.href && React.createElement('div', {
+        className: 'context-menu-item',
+        onClick: handleCopyLinkPath
+      }, '复制路径'),
+      // 【R54.1.1】复制链接相对路径菜单项（仅当存在链接时显示）
+      contextMenu.href && React.createElement('div', {
+        className: 'context-menu-item',
+        onClick: handleCopyLinkRelativePath
+      }, '复制相对路径'),
+      // 【R54.1】删除链接文件菜单项（仅当存在链接时显示）
+      contextMenu.href && React.createElement('div', {
         className: 'context-menu-item',
         onClick: handleDeleteLinkFile
       }, '删除链接文件')

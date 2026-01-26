@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { TodoTask, TodoFile, TextBlock } from '../types';
 import { FileService } from '../services/fileService';
+import { generateClaudeExecuteArgs } from '../services/claudeService';
 
 export class TodoWebviewProvider {
   private panel: vscode.WebviewPanel | undefined;
@@ -353,17 +354,37 @@ export class TodoWebviewProvider {
 
   /**
    * 发送数据到 webview（用于已有 panel 的情况）
+   * @param customMessage 可选的自定义消息，如果提供则发送自定义消息而不是默认的 updateTasks 消息
    */
-  private sendToWebview(): void {
+  private sendToWebview(customMessage?: any): void {
     if (this.panel) {
-      // console.log('[MDTODO] Sending updateTasks, tasks:', this.currentTasks.length, 'textBlocks:', this.currentTextBlocks.length);
-      this.panel.webview.postMessage({
-        type: 'updateTasks',
-        tasks: this.serializeTasks(this.currentTasks),
-        textBlocks: this.currentTextBlocks,
-        filePath: this.currentFilePath
-      });
+      if (customMessage) {
+        // 发送自定义消息
+        this.panel.webview.postMessage(customMessage);
+      } else {
+        // 获取工作区路径用于计算相对路径
+        const workspacePath = this.getWorkspaceFolderPath();
+        // console.log('[MDTODO] Sending updateTasks, tasks:', this.currentTasks.length, 'textBlocks:', this.currentTextBlocks.length);
+        this.panel.webview.postMessage({
+          type: 'updateTasks',
+          tasks: this.serializeTasks(this.currentTasks),
+          textBlocks: this.currentTextBlocks,
+          filePath: this.currentFilePath,
+          workspacePath: workspacePath
+        });
+      }
     }
+  }
+
+  /**
+   * 【R54.1.1.1】获取工作区路径
+   */
+  private getWorkspaceFolderPath(): string {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      return workspaceFolders[0].uri.fsPath;
+    }
+    return '';
   }
 
   /**
@@ -482,6 +503,10 @@ export class TodoWebviewProvider {
       case 'deleteLinkFile':
         // 【R54.1】删除链接文件
         await this.handleDeleteLinkFile(message.url);
+        break;
+      case 'generateExecuteCommand':
+        // 【R54.3】生成复制命令
+        this.handleGenerateExecuteCommand(message.taskId);
         break;
     }
   }
@@ -996,6 +1021,30 @@ export class TodoWebviewProvider {
       console.error('[MDTODO] 删除文件失败:', error);
       vscode.window.showErrorMessage(`删除文件失败: ${error}`);
     }
+  }
+
+  /**
+   * 【R54.3】生成执行命令并发送回 webview
+   * 用于右键"复制执行命令"功能，确保复制的命令与实际执行的一致
+   */
+  private handleGenerateExecuteCommand(taskId: string): void {
+    if (!this.currentFilePath) {
+      console.error('[MDTODO] 无法生成命令：currentFilePath 为空');
+      return;
+    }
+
+    // 使用命令生成函数获取参数字符串
+    const taskDescription = generateClaudeExecuteArgs(this.currentFilePath, taskId);
+    // 组合完整的复制命令
+    const command = `claude --dangerously-skip-permissions ${taskDescription}`;
+
+    // 发送命令回 webview
+    this.sendToWebview({
+      type: 'executeCommandGenerated',
+      command: command,
+      taskId: taskId
+    });
+    console.log('[MDTODO] 已生成并发送执行命令:', command);
   }
 
   /**

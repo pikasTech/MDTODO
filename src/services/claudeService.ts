@@ -34,6 +34,22 @@ function toRelativePath(absolutePath: string, workspacePath: string): string {
   return relativePath;
 }
 
+/**
+ * 【R54.3】生成 Claude 执行命令的参数字符串
+ * 返回格式化的任务描述字符串，用于 --dangerously-skip-permissions 参数
+ */
+export function generateClaudeExecuteArgs(todoFilePath: string, taskId: string): string {
+  const workspacePath = getWorkspaceFolderPath();
+  let relativePath = todoFilePath;
+
+  if (workspacePath) {
+    relativePath = toRelativePath(todoFilePath, workspacePath);
+  }
+
+  // 返回 execute 命令的参数部分（不包含 claude 和 --dangerously-skip-permissions）
+  return `execute "${relativePath} 中的 ${taskId} 任务"`;
+}
+
 export class ClaudeService {
   private outputChannel: vscode.OutputChannel;
   private currentProcess: ChildProcess | undefined;
@@ -53,19 +69,15 @@ export class ClaudeService {
     try {
       // 获取工作区路径作为工作目录
       const workspacePath = getWorkspaceFolderPath();
-      let relativePath = todoFilePath;
 
       if (workspacePath) {
-        // 转换为相对路径
-        relativePath = toRelativePath(todoFilePath, workspacePath);
         this.outputChannel.appendLine(`工作区: ${workspacePath}`);
-        this.outputChannel.appendLine(`相对路径: ${relativePath}`);
       } else {
         this.outputChannel.appendLine(`警告: 未找到工作区，使用绝对路径`);
       }
 
-      // 构造正确的命令参数，使用相对路径
-      const taskDescription = `execute ${relativePath} 中的 ${taskId} 任务`;
+      // 【R54.3】使用命令生成函数获取参数字符串
+      const taskDescription = generateClaudeExecuteArgs(todoFilePath, taskId);
 
       // 设置 spawn 选项，使用工作区路径作为工作目录
       const spawnOptions: any = {
@@ -101,19 +113,13 @@ export class ClaudeService {
   }
 
   async executeTaskInTerminal(todoFilePath: string, taskId: string): Promise<void> {
-    // 获取工作区路径作为工作目录
-    const workspacePath = getWorkspaceFolderPath();
-    let relativePath = todoFilePath;
-
-    if (workspacePath) {
-      // 转换为相对路径
-      relativePath = toRelativePath(todoFilePath, workspacePath);
-    }
+    // 【R54.3】使用命令生成函数获取参数字符串
+    const taskDescription = generateClaudeExecuteArgs(todoFilePath, taskId);
 
     const terminal = vscode.window.createTerminal('Claude Code');
     terminal.show();
-    // 使用正确的命令格式，添加 --dangerously-skip-permissions，使用相对路径
-    const command = `claude --dangerously-skip-permissions execute "${relativePath} 中的 ${taskId} 任务"`;
+    // 组合完整的命令
+    const command = `claude --dangerously-skip-permissions ${taskDescription}`;
     terminal.sendText(command);
   }
 
