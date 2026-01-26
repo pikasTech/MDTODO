@@ -1,41 +1,16 @@
 import * as React from 'react';
-import { marked } from 'marked';
-import markedKatex from 'marked-katex-extension';
-import 'katex/dist/katex.min.css';
+import { marked } from '../utils/marked';
+import { getAllTasks, getAllTaskIds, findTaskById, getFileName } from '../utils/taskUtils';
+import { filterTasks } from '../utils/filterUtils';
 import './TaskList.css';
-import { Task, TextBlock, FilterType, BUTTON_IDS } from './types';
+import { Task, TextBlock, FilterType, BUTTON_IDS, TaskListProps } from './types';
 import { TaskItem } from './TaskItem';
 import { renderTextBlocks } from './TaskBlock';
 import { Toolbar } from './Toolbar';
 import { TaskContextMenu } from './ContextMenu';
 
-// Configure marked options for better rendering
-marked.use(markedKatex as any, {
-  throwOnError: false,
-  output: 'html', // 确保输出为 HTML，避免后续 DOM 修改
-  delimiters: [
-    { left: '$$', right: '$$', display: true },
-    { left: '$', right: '$', display: false },
-    { left: '\\(', right: '\\)', display: false },
-    { left: '\\[', right: '\\]', display: true }
-  ]
-});
-
-marked.setOptions({
-  breaks: true, // Convert \n to <br>
-  gfm: true,    // Enable GitHub Flavored Markdown
-});
-
 // Declare globals for TypeScript
 declare const window: any;
-
-interface TaskListProps {
-  initialTasks?: Task[];
-  initialTextBlocks?: TextBlock[];
-  filePath?: string;
-  vscodeApi?: any;
-  onSaveComplete?: (taskId: string) => void;  // 保存完成后退出编辑模式的回调
-}
 
 const TaskList: React.FC<TaskListProps> = (props) => {
   const { initialTasks = [], initialTextBlocks = [], filePath = '', vscodeApi, onSaveComplete } = props;
@@ -99,14 +74,6 @@ const TaskList: React.FC<TaskListProps> = (props) => {
 
   // 【R13.5】普通文本块编辑状态
   const [textBlockEditModes, setTextBlockEditModes] = React.useState<Record<string, boolean>>({});
-
-  // 【实现R37.3】滚动到顶部
-  const getFileName = (path: string): string => {
-    if (!path) return 'MDTODO 任务管理';
-    // 提取文件名并去掉 .md 后缀
-    const fileName = path.split('/').pop()?.split('\\').pop() || '';
-    return fileName.replace(/\.md$/i, '') || 'MDTODO 任务管理';
-  };
 
   // 用于显示的标题，从 filePath 派生
   const [displayTitle, setDisplayTitle] = React.useState(() => getFileName(filePath));
@@ -299,17 +266,6 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       result.push(task.id);
       if (task.children && task.children.length > 0) {
         result = result.concat(getAllTaskIds(task.children));
-      }
-    }
-    return result;
-  };
-
-  const getAllTasks = (taskList: Task[]): Task[] => {
-    let result: Task[] = [];
-    for (const task of taskList) {
-      result.push(task);
-      if (task.children && task.children.length > 0) {
-        result = result.concat(getAllTasks(task.children));
       }
     }
     return result;
@@ -589,52 +545,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     }, BUTTON_COOLDOWN);
   };
 
-  // 筛选任务：支持状态筛选和关键词搜索
-  // filterType: 'all' | 'active' | 'hide-completed' | 'processing'
-  const filterTasks = (taskList: Task[]): Task[] => {
-    return taskList
-      .map(task => {
-        // 递归筛选子任务
-        const filteredChildren = task.children ? filterTasks(task.children) : [];
-        const matchingTask = {
-          ...task,
-          children: filteredChildren.length > 0 ? filteredChildren : undefined
-        };
-
-        // 检查当前任务是否匹配筛选条件
-        // active = 未完成 且 未执行中
-        // hide-completed = 隐藏已完成（显示未完成任务和进行中任务）
-        // processing = 执行中 且 未完成
-        const isActive = !matchingTask.completed && !matchingTask.processing;
-        const matchesStatus = filterType === 'all' ||
-          (filterType === 'active' && isActive) ||
-          (filterType === 'hide-completed' && !matchingTask.completed) ||
-          (filterType === 'processing' && matchingTask.processing && !matchingTask.completed);
-
-        const matchesKeyword = searchKeyword.trim() === '' ||
-          matchingTask.title.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-          matchingTask.id.toLowerCase().includes(searchKeyword.toLowerCase());
-
-        // 如果任务本身匹配，或者有子任务匹配，则保留
-        if ((matchesStatus && matchesKeyword) || filteredChildren.length > 0) {
-          return matchingTask;
-        }
-        return null;
-      })
-      .filter((task): task is Task => task !== null);
-  };
-
   // 获取筛选后的任务列表
-  const filteredTasks = filterTasks(tasks);
-
-  // 计算筛选后的统计信息
-  const getFilteredStats = () => {
-    const allFilteredTasks = getAllTasks(filteredTasks);
-    return {
-      total: allFilteredTasks.length,
-      completed: allFilteredTasks.filter((t) => t.completed).length
-    };
-  };
+  const filteredTasks = filterTasks(tasks, filterType, searchKeyword);
 
   // 【R51.5.7】获取所有任务用于跳转下拉菜单
   const allTasks = React.useMemo(() => getAllTasks(tasks), [tasks]);
@@ -927,20 +839,6 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       });
     }
   }, [tasks, sendMessage]);
-
-  // 辅助函数：根据ID查找任务
-  const findTaskById = (taskList: Task[], taskId: string): Task | undefined => {
-    for (const task of taskList) {
-      if (task.id === taskId) {
-        return task;
-      }
-      if (task.children && task.children.length > 0) {
-        const found = findTaskById(task.children, taskId);
-        if (found) return found;
-      }
-    }
-    return undefined;
-  };
 
   // 【实现R29.1】发送焦点状态到extension（注释掉以减少高频日志）
   const notifyWebviewActive = React.useCallback(() => {

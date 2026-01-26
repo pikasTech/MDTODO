@@ -15,21 +15,46 @@ interface TaskContextMenuProps {
   onDeleteLinkFile: () => void;
 }
 
+// 菜单项数量（用于计算高度）
+const MENU_ITEM_COUNT = 4;
+// 菜单项高度（px）
+const MENU_ITEM_HEIGHT = 36;
+// 菜单内边距（px）
+const MENU_PADDING = 8;
+
 const TaskContextMenu: React.FC<TaskContextMenuProps> = (props) => {
   const { contextMenu, onCopyExecuteCommand, onCopyLinkPath, onCopyLinkRelativePath, onDeleteLinkFile } = props;
+  const menuRef = React.useRef<HTMLDivElement>(null);
 
   if (!contextMenu || !contextMenu.visible) {
     return null;
   }
 
+  // 计算实际显示的菜单项数量
+  let visibleItemCount = 1; // 复制执行命令
+  if (contextMenu.href) {
+    visibleItemCount += 3; // 复制路径、复制相对路径、删除链接文件
+  }
+
+  // 计算菜单高度
+  const menuHeight = visibleItemCount * MENU_ITEM_HEIGHT + MENU_PADDING;
+
+  // 【R54.4】检测是否需要向上弹出（当点击位置靠近屏幕底部时）
+  const viewportHeight = window.innerHeight;
+  const needsFlipUp = contextMenu.y + menuHeight > viewportHeight;
+
+  // 计算菜单位置
+  const positionStyle: React.CSSProperties = {
+    left: contextMenu.x,
+    top: needsFlipUp ? contextMenu.y - menuHeight : contextMenu.y,
+    position: 'fixed',
+    zIndex: 10000
+  };
+
   return React.createElement('div', {
+    ref: menuRef,
     className: 'context-menu',
-    style: {
-      left: contextMenu.x,
-      top: contextMenu.y,
-      position: 'fixed',
-      zIndex: 10000
-    }
+    style: positionStyle
   },
     // 【R54.2】复制执行命令菜单项
     contextMenu.taskId && React.createElement('div', {

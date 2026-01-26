@@ -41,3 +41,12 @@ export const BUTTON_IDS = {
   SCROLL_TO_BOTTOM: 'scrollToBottom',
   JUMP_TO_NEXT: 'jumpToNext',
 } as const;
+
+// TaskListProps 接口
+export interface TaskListProps {
+  initialTasks?: Task[];
+  initialTextBlocks?: TextBlock[];
+  filePath?: string;
+  vscodeApi?: any;
+  onSaveComplete?: (taskId: string) => void;  // 保存完成后退出编辑模式的回调
+}
