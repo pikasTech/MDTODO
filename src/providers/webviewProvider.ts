@@ -10,6 +10,7 @@ import { ScrollSyncManager } from './scrollSyncManager';
 import { LinkHandler } from './linkHandler';
 import { FileRefreshManager } from './fileRefreshManager';
 import { TaskStatusManager } from './taskStatusManager';
+import { PanelManager, TaskFileManager, CommandGenerator } from './managers';
 
 export class TodoWebviewProvider {
   private panel: vscode.WebviewPanel | undefined;
@@ -24,6 +25,9 @@ export class TodoWebviewProvider {
   private linkHandler!: LinkHandler;
   private fileRefreshManager!: FileRefreshManager;
   private taskStatusManager!: TaskStatusManager;
+  private panelManager!: PanelManager;
+  private taskFileManager!: TaskFileManager;
+  private commandGenerator!: CommandGenerator;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -32,110 +36,64 @@ export class TodoWebviewProvider {
     this.linkHandler = new LinkHandler('', undefined);
     this.fileRefreshManager = new FileRefreshManager();
     this.taskStatusManager = new TaskStatusManager();
-  }
 
-  /**
-   * 从文件路径提取文件名（不带.md后缀）
-   */
-  private getFileNameFromPath(filePath: string): string {
-    if (!filePath) return 'MDTODO 任务管理';
-    const baseName = path.basename(filePath);
-    // 移除 .md 后缀
-    return baseName.replace(/\.md$/i, '');
+    // 初始化新管理器
+    this.panelManager = new PanelManager({
+      context,
+      getHtmlContent: () => this.getHtmlContent(),
+      sendToWebview: (customMessage?: any) => this.sendToWebview(customMessage),
+    });
+
+    this.taskFileManager = new TaskFileManager({
+      currentFilePath: this.currentFilePath,
+      currentTasks: this.currentTasks,
+      currentTextBlocks: this.currentTextBlocks,
+      onTasksChanged: (tasks, textBlocks, filePath) => {
+        this.currentTasks = tasks;
+        this.currentTextBlocks = textBlocks;
+        this.currentFilePath = filePath;
+      },
+      onWebviewRefresh: () => this.updateWebview(),
+    });
+
+    this.commandGenerator = new CommandGenerator({
+      currentFilePath: this.currentFilePath,
+    });
   }
 
   /**
    * 显示或创建Webview面板
-   * 【实现R34.1】支持多webview：如果文件未加载则创建新面板
    */
   showPanel(filePath?: string, tasks?: TodoTask[]): void {
-    // 【R54.1】注释掉 R47 调试日志
-    // console.log('[MDTODO-R47.1] showPanel() 被调用');
-    // console.log('[MDTODO-R47.1] 传入的 filePath:', filePath);
-    // console.log('[MDTODO-R47.1] 现有的 currentFilePath:', this.currentFilePath);
-
     if (tasks) {
       this.currentTasks = tasks;
       this.currentFilePath = filePath || '';
-      // console.log('[MDTODO-R47.1] 更新后的 currentFilePath:', this.currentFilePath);
     }
 
-    // 获取文件名作为标题
-    const panelTitle = this.getFileNameFromPath(this.currentFilePath);
+    this.panelManager.showPanel(this.currentFilePath, tasks);
 
-    if (this.panel) {
-      // console.log('[MDTODO-R47.1] panel 已存在，更新标题和数据');
-      // 更新面板标题为当前文件名
-      this.panel.title = panelTitle;
-      // 在旁边打开（尝试创建新列）
-      this.panel.reveal(vscode.ViewColumn.Beside);
-      // panel 已存在，直接发送数据
-      this.sendToWebview();
-      // 【R47.1】panel已存在时也要确保定时器监测正确的文件
-      this.fileRefreshManager.startPeriodicRefresh();
-    } else {
-      // console.log('[MDTODO-R47.1] 创建新的 panel');
-      // 【R51.2】使用 Beside 代替 Two，以实现对半分宽度
-      // 当使用 Beside 时，VSCode 会自动分配相等的空间给两个列
-      const activeEditor = vscode.window.activeTextEditor;
-      const viewColumn = activeEditor ? vscode.ViewColumn.Beside : vscode.ViewColumn.Two;
+    // 设置消息处理
+    this.panelManager.getPanel()?.webview.onDidReceiveMessage(
+      this.handleMessage.bind(this),
+      undefined,
+      this.context.subscriptions
+    );
 
-      // 在右侧新列打开，使用文件名作为标题
-      this.panel = vscode.window.createWebviewPanel(
-        'mdtodoPanel',
-        panelTitle,
-        viewColumn,
-        {
-          enableScripts: true,
-          retainContextWhenHidden: true,
-          localResourceRoots: [
-            vscode.Uri.joinPath(this.context.extensionUri, 'resources')
-          ]
-        }
-      );
-
-      this.panel.webview.html = this.getHtmlContent();
-
-      // 【实现R29】设置滚动同步监听
-      this.scrollSyncManager.setupScrollSync();
-
-      this.panel.webview.onDidReceiveMessage(
-        this.handleMessage.bind(this),
-        undefined,
-        this.context.subscriptions
-      );
-
-      this.panel.onDidDispose(
-        () => {
-          this.panel = undefined;
-          // 【实现R47】停止定期刷新定时器
-          this.fileRefreshManager.stopPeriodicRefresh();
-        },
-        undefined,
-        this.context.subscriptions
-      );
-
-      // 【实现R47】启动定期刷新定时器
-      this.fileRefreshManager.startPeriodicRefresh();
-
-      // 不再这里调用 updateWebview，改为等待 webview ready 消息
-    }
+    // 启动定期刷新
+    this.fileRefreshManager.startPeriodicRefresh();
   }
 
   /**
-   * 发送数据到 webview（用于已有 panel 的情况）
-   * @param customMessage 可选的自定义消息，如果提供则发送自定义消息而不是默认的 updateTasks 消息
+   * 发送数据到 webview
    */
   private sendToWebview(customMessage?: any): void {
-    if (this.panel) {
+    const panel = this.panelManager.getPanel();
+    if (panel) {
       if (customMessage) {
-        // 发送自定义消息
-        this.panel.webview.postMessage(customMessage);
+        panel.webview.postMessage(customMessage);
       } else {
-        // 获取工作区路径用于计算相对路径
         const workspacePath = this.getWorkspaceFolderPath();
-        // console.log('[MDTODO] Sending updateTasks, tasks:', this.currentTasks.length, 'textBlocks:', this.currentTextBlocks.length);
-        this.panel.webview.postMessage({
+        panel.webview.postMessage({
           type: 'updateTasks',
           tasks: this.serializeTasks(this.currentTasks),
           textBlocks: this.currentTextBlocks,
@@ -147,7 +105,7 @@ export class TodoWebviewProvider {
   }
 
   /**
-   * 【R54.1.1.1】获取工作区路径
+   * 获取工作区路径
    */
   private getWorkspaceFolderPath(): string {
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -161,9 +119,7 @@ export class TodoWebviewProvider {
    * 更新Webview内容
    */
   updateWebview(): void {
-    if (this.panel) {
-      this.sendToWebview();
-    }
+    this.sendToWebview();
   }
 
   /**
@@ -175,22 +131,19 @@ export class TodoWebviewProvider {
 
   /**
    * 序列化任务用于传递到Webview
-   * 【修复R23.1】添加 rawContent 字段用于编辑时保留原始格式
-   * 【修复R39.1】添加 linkCount 和 linkExists 字段用于显示链接状态
    */
   private serializeTasks(tasks: TodoTask[]): any[] {
     return tasks.map(task => ({
       id: task.id,
       title: task.title,
       description: task.description,
-      rawContent: task.rawContent,  // 【修复R23.1】传递原始内容用于编辑
+      rawContent: task.rawContent,
       completed: task.completed,
       processing: task.processing,
       children: task.children.length > 0 ? this.serializeTasks(task.children) : [],
       lineNumber: task.lineNumber,
       hasChildren: task.children.length > 0,
       level: this.getTaskLevel(task.id),
-      // 【修复R39.1】传递链接统计信息
       linkCount: task.linkCount,
       linkExists: task.linkExists
     }));
@@ -211,7 +164,6 @@ export class TodoWebviewProvider {
 
     switch (message.type) {
       case 'ready':
-        // Webview 已准备好，发送数据
         console.log('[MDTODO] Webview ready, sending data');
         this.sendToWebview();
         break;
@@ -234,7 +186,6 @@ export class TodoWebviewProvider {
         await this.handleOpenPreview();
         break;
       case 'openSourceFile':
-        // 【实现R37】打开原MDTODO文件
         await this.handleOpenSourceFile();
         break;
       case 'saveTitle':
@@ -256,38 +207,30 @@ export class TodoWebviewProvider {
         await this.handleAddSubTask(message.taskId);
         break;
       case 'continueTask':
-        // 【实现R46】延续任务：在最后一个子任务上添加延续按钮，创建下一个同级子任务
         await this.handleContinueTask(message.taskId);
         break;
       case 'webviewScrolled':
         await this.handleWebviewScrolled(message.taskId, message.lineNumber);
         break;
       case 'webviewActive':
-        // 【实现R29.1】webview通知它成为焦点
         this.setWebviewAsActive();
         break;
       case 'saveTextBlock':
-        // 【R13.5】保存普通文本块内容
         await this.handleSaveTextBlock(message.blockId, message.content);
         break;
       case 'deleteLinkFile':
-        // 【R54.1】删除链接文件
         await this.handleDeleteLinkFile(message.url);
         break;
       case 'generateExecuteCommand':
-        // 【R54.3】生成复制命令
         this.handleGenerateExecuteCommand(message.taskId);
         break;
     }
   }
 
   /**
-   * 处理来自Webview的滚动事件 - 双向滚动同步
-   * 当用户在webview中滚动时，找到对应的任务并滚动VSCode编辑器到该行
-   * 【实现R29.1】只当webview是主动视图时才同步
+   * 处理来自Webview的滚动事件
    */
   private async handleWebviewScrolled(taskId: string, lineNumber: number): Promise<void> {
-    // 【实现R29.1】检查webview是否是当前主动视图
     if (this.scrollSyncManager.getActiveView() !== 'webview') {
       return;
     }
@@ -298,12 +241,9 @@ export class TodoWebviewProvider {
       return;
     }
 
-    // 获取当前活动的文本编辑器
     const activeEditor = vscode.window.activeTextEditor;
 
-    // 检查活动编辑器是否打开的是同一个文件
     if (activeEditor && activeEditor.document.uri.fsPath === this.currentFilePath) {
-      // 滚动编辑器到指定行
       const position = new vscode.Position(lineNumber, 0);
       activeEditor.revealRange(
         new vscode.Range(position, position),
@@ -313,17 +253,14 @@ export class TodoWebviewProvider {
   }
 
   /**
-   * 设置滚动同步 - 监听VSCode编辑器的滚动事件并同步到webview
-   * 供外部调用，用于启用滚动同步功能
-   * 【实现R29.1】根据焦点状态决定是否同步：只有当editor是主动视图时才同步
+   * 设置滚动同步
    */
   public setupScrollSync(): void {
     this.scrollSyncManager.setupScrollSync();
   }
 
   /**
-   * 【实现R29.1】设置webview为滚动同步的主动视图
-   * 由webview调用，当用户点击或滚动webview时触发
+   * 设置webview为滚动同步的主动视图
    */
   public setWebviewAsActive(): void {
     this.scrollSyncManager.setWebviewAsActive();
@@ -340,8 +277,7 @@ export class TodoWebviewProvider {
   }
 
   /**
-   * 【实现R37】【修改R37.1】打开原MDTODO文件（使用 VSCode）
-   * 说明：md原文用VSCode打开，其他链接（如details里的文件）仍用Typora打开
+   * 打开原MDTODO文件
    */
   private async handleOpenSourceFile(): Promise<void> {
     if (!this.currentFilePath) {
@@ -349,263 +285,71 @@ export class TodoWebviewProvider {
       return;
     }
 
-    // 检查文件是否存在
     if (!fs.existsSync(this.currentFilePath)) {
       vscode.window.showErrorMessage(`文件不存在: ${this.currentFilePath}`);
       return;
     }
 
     console.log('[MDTODO] 打开原文件:', this.currentFilePath);
-
-    // 【R37.1】使用 VSCode 打开 md 原文
     const uri = vscode.Uri.file(this.currentFilePath);
     await vscode.window.showTextDocument(uri);
   }
 
   /**
    * 处理保存标题
-   * 完整实现：读取文件、查找任务行、更新任务内容、写入文件
-   * 注意：编辑的是 RXX 换行后的任务内容，而不是 RXX 同行的标题
-   * 【修复R22.10】正确处理多行内容，替换整个内容块而不是只替换第一行
    */
   private async handleSaveTitle(taskId: string, newTitle: string): Promise<void> {
-    if (!this.currentFilePath) {
-      vscode.window.showWarningMessage('请先打开一个TODO文件');
-      return;
-    }
-
-    console.log(`保存标题: ${taskId} -> ${newTitle}`);
-
-    try {
-      const fileService = new FileService();
-      const content = await fileService.readFile(vscode.Uri.file(this.currentFilePath));
-      const lines = content.split('\n');
-
-      // 找到任务所在的行
-      let taskLineIndex = -1;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        // 使用精确匹配避免部分ID匹配
-        const taskPattern = new RegExp(`^##+\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
-        if (taskPattern.test(line)) {
-          taskLineIndex = i;
-          break;
-        }
-      }
-
-      if (taskLineIndex === -1) {
-        vscode.window.showWarningMessage(`未找到任务 ${taskId}`);
-        return;
-      }
-
-      // 【修复R22.10】找到任务内容的结束位置
-      // 规则：如果下一个任务是同级任务（ID不以当前任务ID为前缀），则内容结束
-      // 子任务（如 R1.1）以 R1. 开头，被视为 R1 内容的一部分，但编辑时只替换直接描述
-      let contentEndIndex = lines.length;
-      let subtaskStartIndex = -1; // 子任务开始的行号
-      for (let i = taskLineIndex + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        // 检查是否是任务标题行（## 或 ### 开头，且包含 RXX）
-        const taskHeaderMatch = line.match(/^##+\s+([^R]*R\d+(?:\.\d+)*)/);
-        if (taskHeaderMatch) {
-          const nextTaskId = taskHeaderMatch[1];
-          // 第一个子任务开始的位置
-          if (subtaskStartIndex === -1 && nextTaskId.startsWith(taskId + '.')) {
-            subtaskStartIndex = i;
-          }
-          // 检查下一个任务是否是同级任务（不以当前任务ID为前缀）
-          if (!nextTaskId.startsWith(taskId + '.')) {
-            // 同级任务，内容结束
-            contentEndIndex = i;
-            break;
-          }
-        }
-      }
-
-      // 替换整个内容块：删除从 taskLineIndex+1 到 contentEndIndex 的所有行
-      // 然后插入新内容（如果 newTitle 非空）
-      const newLines: string[] = [];
-
-      // 复制任务标题行之前的行
-      for (let i = 0; i <= taskLineIndex; i++) {
-        newLines.push(lines[i]);
-      }
-
-      // 添加新内容（如果 newTitle 非空）
-      if (newTitle.trim()) {
-        // 确保任务标题和内容之间有一个空行
-        // 检查任务标题行末尾是否已有换行
-        const taskLineEndsWithNewline = lines[taskLineIndex].endsWith('\n');
-        if (!taskLineEndsWithNewline && newLines[newLines.length - 1] === lines[taskLineIndex]) {
-          // 需要在任务标题后添加换行
-          newLines.push('');
-        } else if (taskLineEndsWithNewline && newLines.length > 0 && newLines[newLines.length - 1] === '') {
-          // 已经有空行
-        } else {
-          // 需要添加一个空行
-          newLines.push('');
-        }
-
-        // 添加新内容行
-        newLines.push(newTitle);
-
-        // 【修复R22.11】在内容后添加一个空行，确保内容块和下一个任务标题之间有两个换行符
-        // 结构：任务内容后跟一个空行，然后下一个任务
-        // join('\n') 会产生：...内容\n\n下一个任务...
-        newLines.push('');
-
-        // 如果有子任务，复制子任务内容
-        if (subtaskStartIndex !== -1 && subtaskStartIndex < contentEndIndex) {
-          // 复制子任务内容（从子任务开始到同级任务之前）
-          for (let i = subtaskStartIndex; i < contentEndIndex; i++) {
-            newLines.push(lines[i]);
-          }
-        }
-      }
-
-      // 复制同级任务及之后的内容
-      for (let i = contentEndIndex; i < lines.length; i++) {
-        newLines.push(lines[i]);
-      }
-
-      const newContent = newLines.join('\n');
-      await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-
-      // 调用 webview 的 refreshTaskTitle 方法来更新单个任务
-      if (this.panel) {
-        this.panel.webview.postMessage({
-          type: 'refreshTaskTitle',
-          taskId: taskId,
-          newTitle: newTitle
-        });
-      }
-
+    const success = await this.taskFileManager.handleSaveTitle(taskId, newTitle);
+    if (success) {
       vscode.window.showInformationMessage(`任务 ${taskId} 内容已更新`);
-    } catch (error: any) {
-      console.error('[MDTODO] Error saving title:', error);
-      vscode.window.showErrorMessage(`保存标题失败: ${error.message}`);
+      await this.loadFile(this.currentFilePath);
     }
   }
 
   /**
-   * 【R13.5】处理保存普通文本块内容
-   * 普通文本块是从文件开头到第一个任务之前的非任务内容
+   * 处理保存文本块
    */
   private async handleSaveTextBlock(blockId: string, newContent: string): Promise<void> {
-    if (!this.currentFilePath) {
-      vscode.window.showWarningMessage('请先打开一个TODO文件');
-      return;
-    }
-
-    console.log(`[MDTODO] 保存文本块: ${blockId} -> ${newContent}`);
-
-    try {
-      const fileService = new FileService();
-      const content = await fileService.readFile(vscode.Uri.file(this.currentFilePath));
-      const lines = content.split('\n');
-
-      // 从 blockId 中提取起始行号（格式：text-{lineNumber}）
-      const lineNumber = parseInt(blockId.replace('text-', ''));
-      if (isNaN(lineNumber)) {
-        vscode.window.showWarningMessage(`无效的文本块ID: ${blockId}`);
-        return;
-      }
-
-      // 找到第一个任务标题的位置（用于确定文本块结束位置）
-      let firstTaskLine = -1;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        const isHeading = line.match(/^#{2,}\s/);
-        const hasRxx = /#{1,6}\s+.*R\d+(?:\.\d+)*/.test(line);
-        if (isHeading && hasRxx) {
-          firstTaskLine = i;
-          break;
-        }
-      }
-
-      // 确定文本块的范围：从 lineNumber 到第一个任务标题之前
-      const blockStartIndex = lineNumber;
-      const blockEndIndex = firstTaskLine > 0 ? firstTaskLine : lines.length;
-
-      // 替换文本块内容
-      const newLines: string[] = [];
-
-      // 复制文本块之前的行
-      for (let i = 0; i < blockStartIndex; i++) {
-        newLines.push(lines[i]);
-      }
-
-      // 添加新的文本块内容（按行分割，保持格式）
-      const newContentLines = newContent.split('\n');
-      for (const line of newContentLines) {
-        newLines.push(line);
-      }
-
-      // 复制第一个任务及之后的内容
-      for (let i = blockEndIndex; i < lines.length; i++) {
-        newLines.push(lines[i]);
-      }
-
-      const newFileContent = newLines.join('\n');
-      await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newFileContent);
-
-      // 重新加载文件
+    const success = await this.taskFileManager.handleSaveTextBlock(blockId, newContent);
+    if (success) {
       await this.loadFile(this.currentFilePath);
-
       vscode.window.showInformationMessage(`文本块已更新`);
-    } catch (error: any) {
-      console.error('[MDTODO] Error saving text block:', error);
-      vscode.window.showErrorMessage(`保存文本块失败: ${error.message}`);
     }
   }
 
   /**
    * 处理打开链接
-   * 支持相对路径（如 ./docs/file.md、../file.md）和绝对路径/URL
-   * .md 文件默认使用 Typora 打开
    */
   private async handleOpenLink(url: string): Promise<void> {
     await this.linkHandler.handleOpenLink(url);
   }
 
   /**
-   * 【R54.1】删除链接文件
-   * 支持相对路径（如 ./docs/file.md、../file.md）和绝对路径/URL
-   * 只删除本地文件，不删除 HTTP/HTTPS 链接
+   * 删除链接文件
    */
   private async handleDeleteLinkFile(url: string): Promise<void> {
     await this.linkHandler.handleDeleteLinkFile(url);
   }
 
   /**
-   * 【R54.3】生成执行命令并发送回 webview
-   * 用于右键"复制执行命令"功能，确保复制的命令与实际执行的一致
+   * 生成执行命令
    */
   private handleGenerateExecuteCommand(taskId: string): void {
-    if (!this.currentFilePath) {
-      console.error('[MDTODO] 无法生成命令：currentFilePath 为空');
-      return;
+    const result = this.commandGenerator.generateExecuteCommand(taskId);
+    if (result) {
+      this.sendToWebview({
+        type: 'executeCommandGenerated',
+        command: result.command,
+        taskId: result.taskId
+      });
+      console.log('[MDTODO] 已生成并发送执行命令:', result.command);
     }
-
-    // 使用命令生成函数获取参数字符串
-    const taskDescription = generateClaudeExecuteArgs(this.currentFilePath, taskId);
-    // 组合完整的复制命令
-    const command = `claude --dangerously-skip-permissions ${taskDescription}`;
-
-    // 发送命令回 webview
-    this.sendToWebview({
-      type: 'executeCommandGenerated',
-      command: command,
-      taskId: taskId
-    });
-    console.log('[MDTODO] 已生成并发送执行命令:', command);
   }
 
   /**
-   * 处理打开文件（公开方法，供外部调用）
+   * 处理打开文件
    */
   public async handleOpenFile(): Promise<void> {
-    // 获取FileService并显示文件选择器
     const { FileService } = await import('../services/fileService');
     const fileService = new FileService();
     const files = await fileService.findTodoFiles();
@@ -635,7 +379,7 @@ export class TodoWebviewProvider {
   }
 
   /**
-   * 尝试加载文件到webview，如果格式不匹配返回false
+   * 尝试加载文件到webview
    */
   public async tryLoadFile(filePath: string): Promise<boolean> {
     const { FileService } = await import('../services/fileService');
@@ -645,8 +389,6 @@ export class TodoWebviewProvider {
 
     try {
       const content = await fileService.readFile(vscode.Uri.file(filePath));
-
-      // 检查格式：## 或 ### 开头的任务行，并且有 R 开头的ID
       const hasTodoFormat = /##+\s.*R\d+/.test(content);
 
       if (hasTodoFormat) {
@@ -657,7 +399,6 @@ export class TodoWebviewProvider {
         this.currentTasks = tasks;
         this.currentTextBlocks = textBlocks;
         this.currentFilePath = filePath;
-        // 更新管理器状态
         this.updateManagersState();
         this.updateWebview();
         return true;
@@ -675,21 +416,24 @@ export class TodoWebviewProvider {
    * 更新所有管理器的内部状态
    */
   private updateManagersState(): void {
-    this.scrollSyncManager.updateState(this.currentTasks, this.currentFilePath, this.panel);
-    this.linkHandler.updateState(this.currentFilePath, this.panel);
+    const panel = this.panelManager.getPanel();
+    this.scrollSyncManager.updateState(this.currentTasks, this.currentFilePath, panel);
+    this.linkHandler.updateState(this.currentFilePath, panel);
     this.fileRefreshManager.updateState(this.currentFilePath, this.currentTasks, this.currentTextBlocks);
     this.taskStatusManager.updateState(this.currentFilePath, this.currentTasks);
 
-    // 设置 FileRefreshManager 的回调
     this.fileRefreshManager.setCallbacks(
       (filePath: string) => this.loadFile(filePath),
       () => this.sendToWebview()
     );
+
+    // 更新新管理器状态
+    this.taskFileManager.updateState(this.currentFilePath, this.currentTasks, this.currentTextBlocks);
+    this.commandGenerator.updateState(this.currentFilePath);
   }
 
   /**
-   * 加载文件到webview（公开方法）
-   * 【R34.2】修复：加载文件后更新面板标题为当前文件名
+   * 加载文件到webview
    */
   public async loadFile(filePath: string): Promise<boolean> {
     console.log('[MDTODO] loadFile called:', filePath);
@@ -701,8 +445,6 @@ export class TodoWebviewProvider {
 
     try {
       const content = await fileService.readFile(vscode.Uri.file(filePath));
-
-      // 检查格式：## 或 ### 开头的任务行，并且有 R 开头的ID
       const hasTodoFormat = /##+\s.*R\d+/.test(content);
       console.log('[MDTODO] hasTodoFormat:', hasTodoFormat);
 
@@ -713,29 +455,20 @@ export class TodoWebviewProvider {
         this.currentTasks = tasks;
         this.currentTextBlocks = textBlocks;
         this.currentFilePath = filePath;
-        // 更新管理器状态
         this.updateManagersState();
-        // 【R34.2】加载文件后更新面板标题
-        this.updatePanelTitle();
+        this.panelManager.updatePanelTitle(filePath);
         this.updateWebview();
-        // 【实现R47】记录文件内容用于后续比较
         await this.fileRefreshManager.recordCurrentFileContent();
-        // 【R47.2】确保在 loadFile 后启动定期刷新定时器
         this.fileRefreshManager.startPeriodicRefresh();
         return true;
       } else {
         console.log('[MDTODO] Format not matched, setting empty state');
-        // 格式不匹配时，仍显示文件名但任务列表为空
         this.currentTasks = [];
         this.currentFilePath = filePath;
-        // 更新管理器状态
         this.updateManagersState();
-        // 【R34.2】加载文件后更新面板标题
-        this.updatePanelTitle();
+        this.panelManager.updatePanelTitle(filePath);
         this.updateWebview();
-        // 【实现R47】记录文件内容用于后续比较
         await this.fileRefreshManager.recordCurrentFileContent();
-        // 【R47.2】确保在 loadFile 后启动定期刷新定时器
         this.fileRefreshManager.startPeriodicRefresh();
         return false;
       }
@@ -746,20 +479,10 @@ export class TodoWebviewProvider {
   }
 
   /**
-   * 【R34.2】更新面板标题为当前文件名
-   */
-  private updatePanelTitle(): void {
-    if (this.panel && this.currentFilePath) {
-      const panelTitle = this.getFileNameFromPath(this.currentFilePath);
-      this.panel.title = panelTitle;
-    }
-  }
-
-  /**
    * 处理任务选择
    */
   private async handleTaskSelected(taskId: string): Promise<void> {
-    const task = this.findTask(this.currentTasks, taskId);
+    const task = this.taskFileManager.findTask(this.currentTasks, taskId);
     if (task && this.resolveCallback) {
       this.resolveCallback(task);
     }
@@ -775,8 +498,7 @@ export class TodoWebviewProvider {
   }
 
   /**
-   * 处理Claude执行（来自Webview）
-   * 添加 [in_progress] 标记到任务，并在执行完成后移除
+   * 处理Claude执行
    */
   private async handleClaudeExecute(taskId: string): Promise<void> {
     if (!this.currentFilePath) {
@@ -785,20 +507,10 @@ export class TodoWebviewProvider {
     }
 
     try {
-      // 1. 添加 [in_progress] 标记
       await this.taskStatusManager.markTaskAsProcessing(taskId, true);
-      // 刷新显示
       await this.loadFile(this.currentFilePath);
-
-      // 2. 执行 Claude 任务
       await this.handleExecuteTask(taskId);
-
-      // 3. 执行完成后移除 [in_progress] 标记
-      // 注意：由于 Claude 是异步执行的，这里不等待，直接返回
-      // 用户可以手动点击完成来标记任务完成
-      // 或者实现一个机制来检测 Claude 执行完成
     } catch (error: any) {
-      // 如果执行失败，也移除 [in_progress] 标记
       await this.taskStatusManager.markTaskAsProcessing(taskId, false);
       await this.loadFile(this.currentFilePath);
       console.error('[MDTODO] Error in Claude execute:', error);
@@ -808,7 +520,6 @@ export class TodoWebviewProvider {
 
   /**
    * 处理标记完成
-   * 切换任务的完成状态：已完成的点击后取消完成，未完成的点击后标记完成
    */
   private async handleMarkComplete(taskId: string): Promise<void> {
     if (!this.currentFilePath) {
@@ -816,413 +527,75 @@ export class TodoWebviewProvider {
       return;
     }
 
-    // 获取当前任务状态
-    const task = this.findTask(this.currentTasks, taskId);
+    const task = this.taskFileManager.findTask(this.currentTasks, taskId);
     if (!task) {
       vscode.window.showWarningMessage(`未找到任务 ${taskId}`);
       return;
     }
 
-    // 切换完成状态：如果已完成则移除标记，否则添加标记
     const isComplete = !task.completed;
     await this.taskStatusManager.markTaskAsFinished(taskId, isComplete);
-
-    // 重新加载文件并刷新显示
     await this.loadFile(this.currentFilePath);
 
     vscode.window.showInformationMessage(`任务 ${taskId} 已${isComplete ? '标记完成' : '取消完成'}`);
   }
 
   /**
-   * 生成新任务的内容模板
-   * 【R36.1】统一主任务和子任务的添加逻辑
-   * 【R49】修改报告文件命名方式：使用时间戳命名，如 20260123_1050_Task_Report.md
-   * @param taskId 新任务ID
-   * @param parentTaskId 父任务ID（如果有则为子任务）
-   * @returns 新任务的内容模板字符串
-   */
-  private generateNewTaskContent(taskId: string, parentTaskId?: string): string {
-    // 构建报告文件路径
-    const fileName = path.basename(this.currentFilePath, '.md');
-    // 【R49】使用时间戳格式命名：YYYYMMDD_HHmm_Task_Report.md
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const timestamp = `${year}${month}${day}_${hours}${minutes}`;
-    const reportPath = `./details/${fileName}/${timestamp}_Task_Report.md`;
-
-    // 确定标题级别：主任务用 ##，子任务用 ###
-    const headerLevel = parentTaskId ? '###' : '##';
-
-    // 生成内容模板（带逗号）
-    return `${headerLevel} ${taskId}\n\n, 完成任务后将详细报告写入[${taskId}](${reportPath})。`;
-  }
-
-  /**
    * 处理添加任务
-   * 【R36】添加报告模板：完成任务后将详细报告写入[Rxx](path_to_rxx)
-   * 【R36.1】使用公共函数 generateNewTaskContent
    */
   private async handleAddTask(): Promise<void> {
-    if (!this.currentFilePath) {
-      vscode.window.showWarningMessage('请先打开一个TODO文件');
-      return;
-    }
-
-    // 获取当前所有任务的ID，生成新的任务编号
-    const allTaskIds = this.getAllTaskIds(this.currentTasks);
-    const newId = this.generateNewTaskId(allTaskIds);
-
-    // 【R36.1】使用公共函数生成任务内容
-    const newTaskContent = this.generateNewTaskContent(newId);
-
-    try {
-      const fileService = new FileService();
-      const content = await fileService.readFile(vscode.Uri.file(this.currentFilePath));
-      const lines = content.split('\n');
-
-      // 找到最后一个任务的位置，在其后添加新任务
-      // 注意：不再跳过 [completed] 的任务，因为已完成的任务也是文件中的最后一个任务
-      let lastTaskEnd = lines.length;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i].trim();
-        if (line.match(/^##+\s+/) && line.match(/R\d+(?:\.\d+)*/)) {
-          // 找到最后一个任务标题，往后找到其内容结束位置
-          lastTaskEnd = i;
-          for (let j = i + 1; j < lines.length; j++) {
-            const nextLine = lines[j].trim();
-            // 检查是否是任务标题行（包含 [completed] 的也算）
-            if (nextLine.match(/^##+\s+/) && nextLine.match(/R\d+(?:\.\d+)*/)) {
-              lastTaskEnd = j;
-              break;
-            }
-            if (j === lines.length - 1) {
-              lastTaskEnd = lines.length;
-            }
-          }
-          break;
-        }
-      }
-
-      // 在最后一个任务后插入新任务
-      lines.splice(lastTaskEnd, 0, newTaskContent);
-      const newContent = lines.join('\n');
-      await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-
-      // 重新加载文件并通知webview新任务的ID用于滚动和聚焦
+    const newId = await this.taskFileManager.handleAddTask();
+    if (newId) {
       await this.loadFile(this.currentFilePath);
       this.notifyNewTask(newId);
-    } catch (error: any) {
-      console.error('[MDTODO] Error adding task:', error);
-      vscode.window.showErrorMessage(`添加任务失败: ${error.message}`);
     }
   }
 
   /**
-   * 通知webview新添加的任务ID，用于滚动和聚焦
+   * 通知webview新添加的任务
    */
   private notifyNewTask(taskId: string): void {
-    if (this.panel) {
-      this.panel.webview.postMessage({
-        type: 'newTaskAdded',
-        taskId: taskId
-      });
-    }
+    this.sendToWebview({
+      type: 'newTaskAdded',
+      taskId: taskId
+    });
   }
 
   /**
    * 处理删除任务
-   * 修复：
-   * 1. 使用精确的任务ID匹配（避免 R1 误匹配 R10 或 R4.1）
-   * 2. 基于层级判断边界，不再跳过 [completed] 状态的任务
    */
   private async handleDeleteTask(taskId: string): Promise<void> {
-    if (!this.currentFilePath) {
-      vscode.window.showWarningMessage('请先打开一个TODO文件');
-      return;
-    }
-
-    try {
-      const fileService = new FileService();
-      const content = await fileService.readFile(vscode.Uri.file(this.currentFilePath));
-
-      // 找到任务所在的行
-      const lines = content.split('\n');
-      let startLine = -1;
-      let endLine = -1;
-      let taskLevel = 0;
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        // 检查是否是任务标题行，使用精确匹配避免部分ID匹配
-        // 例如 R1 不会匹配 R10 或 R4.1
-        const taskPattern = new RegExp(`^##+\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
-        if (taskPattern.test(line)) {
-          startLine = i;
-          // 计算任务层级（#的数量）
-          const match = line.match(/^(#+)/);
-          taskLevel = match ? match[1].length : 2;
-          // 查找下一个同级或更高级别任务标题或文件结束
-          for (let j = i + 1; j < lines.length; j++) {
-            const nextLine = lines[j].trim();
-            // 检查是否是任务标题行（不再跳过 [completed] 状态的任务）
-            if (nextLine.match(/^##+\s+/) && nextLine.match(/R\d+(?:\.\d+)*/)) {
-              const nextMatch = nextLine.match(/^(#+)/);
-              const nextLevel = nextMatch ? nextMatch[1].length : 2;
-              // 如果是同级或更高级别任务，说明当前任务内容结束
-              if (nextLevel <= taskLevel) {
-                endLine = j;
-                break;
-              }
-            }
-          }
-          if (endLine === -1) {
-            endLine = lines.length;
-          }
-          break;
-        }
-      }
-
-      if (startLine === -1) {
-        vscode.window.showWarningMessage(`未找到任务 ${taskId}`);
-        return;
-      }
-
-      // 删除任务及其内容
-      lines.splice(startLine, endLine - startLine);
-      const newContent = lines.join('\n');
-
-      await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-
-      vscode.window.showInformationMessage(`任务 ${taskId} 已删除`);
-
-      // 重新加载文件
+    const success = await this.taskFileManager.handleDeleteTask(taskId);
+    if (success) {
       await this.loadFile(this.currentFilePath);
-    } catch (error: any) {
-      console.error('[MDTODO] Error deleting task:', error);
-      vscode.window.showErrorMessage(`删除任务失败: ${error.message}`);
     }
   }
 
   /**
    * 处理添加子任务
-   * 【R36】添加报告模板：完成任务后将详细报告写入[Rxx](path_to_rxx)
-   * 【R36.1】使用公共函数 generateNewTaskContent 统一添加逻辑
    */
   private async handleAddSubTask(parentTaskId: string): Promise<void> {
-    if (!this.currentFilePath) {
-      vscode.window.showWarningMessage('请先打开一个TODO文件');
-      return;
-    }
-
-    // 获取当前所有任务的ID，生成新的子任务编号
-    const allTaskIds = this.getAllTaskIds(this.currentTasks);
-    const newId = this.generateNewTaskId(allTaskIds, parentTaskId);
-
-    // 【R36.1】使用公共函数生成任务内容（传入父任务ID以生成正确的标题级别）
-    const newTaskContent = this.generateNewTaskContent(newId, parentTaskId);
-
-    try {
-      const fileService = new FileService();
-      const content = await fileService.readFile(vscode.Uri.file(this.currentFilePath));
-      const lines = content.split('\n');
-
-      // 找到父任务的位置和层级
-      let parentLine = -1;
-      let parentLevel = 0;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line.includes(parentTaskId)) {
-          parentLine = i;
-          // 计算父任务的层级（#的数量）
-          const match = line.match(/^(#+)/);
-          parentLevel = match ? match[1].length : 2;
-          break;
-        }
-      }
-
-      if (parentLine === -1) {
-        vscode.window.showWarningMessage(`未找到父任务 ${parentTaskId}`);
-        return;
-      }
-
-      // 找到父任务内容的结束位置（下一个同级或更高级别任务之前）
-      let insertPos = -1;
-      for (let j = parentLine + 1; j < lines.length; j++) {
-        const line = lines[j].trim();
-        // 如果是任务标题行
-        if (line.match(/^##+\s+/)) {
-          const match = line.match(/^(#+)/);
-          const level = match ? match[1].length : 2;
-          // 如果是同级或更高级别的任务，说明父任务内容结束
-          if (level <= parentLevel) {
-            insertPos = j;
-            break;
-          }
-        }
-      }
-      // 如果没找到，插在文件末尾
-      if (insertPos === -1) {
-        insertPos = lines.length;
-      }
-
-      // 在父任务内容后插入子任务
-      lines.splice(insertPos, 0, newTaskContent);
-      const newContent = lines.join('\n');
-
-      await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-
-      // 重新加载文件并通知webview新任务的ID用于滚动和聚焦
+    const newId = await this.taskFileManager.handleAddSubTask(parentTaskId);
+    if (newId) {
       await this.loadFile(this.currentFilePath);
       this.notifyNewTask(newId);
-    } catch (error: any) {
-      console.error('[MDTODO] Error adding subtask:', error);
-      vscode.window.showErrorMessage(`添加子任务失败: ${error.message}`);
     }
   }
 
   /**
-   * 【实现R46】处理延续任务
-   * 在最后一个子任务上添加延续按钮，创建下一个同级子任务
-   * 例如 R2.5 按延续按钮会创建 R2.6
+   * 处理延续任务
    */
   private async handleContinueTask(currentTaskId: string): Promise<void> {
-    if (!this.currentFilePath) {
-      vscode.window.showWarningMessage('请先打开一个TODO文件');
-      return;
-    }
-
-    // 获取当前所有任务的ID
-    const allTaskIds = this.getAllTaskIds(this.currentTasks);
-
-    // 解析当前任务ID，获取父任务ID
-    // 例如 R2.5 -> parentId = 'R2', currentNumber = 5
-    const parts = currentTaskId.split('.');
-    if (parts.length < 2) {
-      vscode.window.showWarningMessage('延续任务只能在子任务上使用');
-      return;
-    }
-
-    // 生成新的任务ID（同级）
-    const parentId = parts.slice(0, -1).join('.');
-    const newId = this.generateNewTaskId(allTaskIds, parentId);
-
-    // 【R36.1】使用公共函数生成任务内容（传入父任务ID以生成正确的标题级别）
-    const newTaskContent = this.generateNewTaskContent(newId, parentId);
-
-    try {
-      const fileService = new FileService();
-      const content = await fileService.readFile(vscode.Uri.file(this.currentFilePath));
-      const lines = content.split('\n');
-
-      // 找到当前任务的位置
-      let currentLine = -1;
-      let currentLevel = 0;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        // 必须匹配任务标题行（使用精确匹配避免部分ID匹配）
-        const taskPattern = new RegExp(`^#{2,6}\\s+[^\\n]*\\b${currentTaskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
-        if (taskPattern.test(line)) {
-          currentLine = i;
-          // 计算当前任务的层级（#的数量）
-          const match = line.match(/^(#+)/);
-          currentLevel = match ? match[1].length : 2;
-          break;
-        }
-      }
-
-      if (currentLine === -1) {
-        vscode.window.showWarningMessage(`未找到任务 ${currentTaskId}`);
-        return;
-      }
-
-      // 找到当前任务的结束位置（下一个同级或更高级别任务之前）
-      let insertPos = -1;
-      for (let j = currentLine + 1; j < lines.length; j++) {
-        const line = lines[j].trim();
-        // 如果是任务标题行
-        if (line.match(/^##+\s+/)) {
-          const match = line.match(/^(#+)/);
-          const level = match ? match[1].length : 2;
-          // 如果是同级或更高级别的任务，说明当前任务内容结束
-          if (level <= currentLevel) {
-            insertPos = j;
-            break;
-          }
-        }
-      }
-      // 如果没找到，插在文件末尾
-      if (insertPos === -1) {
-        insertPos = lines.length;
-      }
-
-      // 在当前任务后插入新任务
-      lines.splice(insertPos, 0, newTaskContent);
-      const newContent = lines.join('\n');
-
-      await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-
-      // 重新加载文件并通知webview新任务的ID用于滚动和聚焦
+    const newId = await this.taskFileManager.handleContinueTask(currentTaskId);
+    if (newId) {
       await this.loadFile(this.currentFilePath);
       this.notifyNewTask(newId);
-
       console.log(`[MDTODO] 延续任务: ${currentTaskId} -> ${newId}`);
-    } catch (error: any) {
-      console.error('[MDTODO] Error continuing task:', error);
-      vscode.window.showErrorMessage(`延续任务失败: ${error.message}`);
     }
   }
 
   /**
-   * 获取所有任务ID
-   */
-  private getAllTaskIds(tasks: TodoTask[]): string[] {
-    const ids: string[] = [];
-    const collectIds = (taskList: TodoTask[]) => {
-      for (const task of taskList) {
-        ids.push(task.id);
-        if (task.children && task.children.length > 0) {
-          collectIds(task.children);
-        }
-      }
-    };
-    collectIds(tasks);
-    return ids;
-  }
-
-  /**
-   * 生成新的任务ID
-   */
-  private generateNewTaskId(existingIds: string[], parentId?: string): string {
-    if (parentId) {
-      // 生成子任务ID，如 R1 -> R1.1
-      const childIds = existingIds
-        .filter(id => id.startsWith(parentId + '.'))
-        .map(id => {
-          const match = id.match(new RegExp(`^${parentId}\\.(\\d+)$`));
-          return match ? parseInt(match[1]) : 0;
-        })
-        .filter(n => n > 0);
-      const maxChild = childIds.length > 0 ? Math.max(...childIds) : 0;
-      return `${parentId}.${maxChild + 1}`;
-    } else {
-      // 生成主任务ID，如 R6, R7
-      const mainIds = existingIds
-        .filter(id => /^[Rr]\d+$/.test(id))
-        .map(id => {
-          const match = id.match(/^R(\d+)$/i);
-          return match ? parseInt(match[1]) : 0;
-        });
-      const maxMain = mainIds.length > 0 ? Math.max(...mainIds) : 0;
-      return `R${maxMain + 1}`;
-    }
-  }
-
-  /**
-   * 处理刷新 - 直接重新加载当前文件
+   * 处理刷新
    */
   private async handleRefresh(): Promise<void> {
     if (!this.currentFilePath) {
@@ -1231,22 +604,6 @@ export class TodoWebviewProvider {
     }
     console.log('[MDTODO] 刷新当前文件:', this.currentFilePath);
     await this.loadFile(this.currentFilePath);
-  }
-
-  /**
-   * 查找任务
-   */
-  private findTask(tasks: TodoTask[], taskId: string): TodoTask | undefined {
-    for (const task of tasks) {
-      if (task.id === taskId) {
-        return task;
-      }
-      if (task.children.length > 0) {
-        const found = this.findTask(task.children, taskId);
-        if (found) return found;
-      }
-    }
-    return undefined;
   }
 
   /**
@@ -1259,17 +616,15 @@ export class TodoWebviewProvider {
 
   /**
    * 获取Webview HTML内容
-   * CSS 由 webpack 打包到 bundle.js 中内联，无需单独加载
    */
   private getHtmlContent(): string {
     const templatePath = path.join(this.context.extensionPath, 'resources', 'template.html');
-    const bundleUri = this.panel!.webview.asWebviewUri(
+    const bundleUri = this.panelManager.getPanel()!.webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'resources', 'bundle.js')
     );
 
     try {
       let html = fs.readFileSync(templatePath, 'utf-8');
-      // 不再加载 style.css，样式已内联到 bundle.js
       html = html.replace('{{STYLE_CSS_URI}}', '');
       html = html.replace('{{BUNDLE_JS_URI}}', bundleUri.toString());
       return html;
@@ -1285,7 +640,6 @@ export class TodoWebviewProvider {
   refresh(tasks: TodoTask[], filePath: string): void {
     this.currentTasks = tasks;
     this.currentFilePath = filePath;
-    // 更新管理器状态
     this.updateManagersState();
     this.updateWebview();
   }
@@ -1294,18 +648,14 @@ export class TodoWebviewProvider {
    * 关闭面板
    */
   dispose(): void {
-    // 【实现R47】停止定期刷新定时器
     this.fileRefreshManager.stopPeriodicRefresh();
-    if (this.panel) {
-      this.panel.dispose();
-      this.panel = undefined;
-    }
+    this.panelManager.dispose();
   }
 
   /**
    * 检查面板是否已打开
    */
   isVisible(): boolean {
-    return this.panel !== undefined;
+    return this.panelManager.isVisible();
   }
 }
