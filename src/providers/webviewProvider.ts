@@ -37,21 +37,22 @@ export class TodoWebviewProvider {
    * 【实现R34.1】支持多webview：如果文件未加载则创建新面板
    */
   showPanel(filePath?: string, tasks?: TodoTask[]): void {
-    console.log('[MDTODO-R47.1] showPanel() 被调用');
-    console.log('[MDTODO-R47.1] 传入的 filePath:', filePath);
-    console.log('[MDTODO-R47.1] 现有的 currentFilePath:', this.currentFilePath);
+    // 【R54.1】注释掉 R47 调试日志
+    // console.log('[MDTODO-R47.1] showPanel() 被调用');
+    // console.log('[MDTODO-R47.1] 传入的 filePath:', filePath);
+    // console.log('[MDTODO-R47.1] 现有的 currentFilePath:', this.currentFilePath);
 
     if (tasks) {
       this.currentTasks = tasks;
       this.currentFilePath = filePath || '';
-      console.log('[MDTODO-R47.1] 更新后的 currentFilePath:', this.currentFilePath);
+      // console.log('[MDTODO-R47.1] 更新后的 currentFilePath:', this.currentFilePath);
     }
 
     // 获取文件名作为标题
     const panelTitle = this.getFileNameFromPath(this.currentFilePath);
 
     if (this.panel) {
-      console.log('[MDTODO-R47.1] panel 已存在，更新标题和数据');
+      // console.log('[MDTODO-R47.1] panel 已存在，更新标题和数据');
       // 更新面板标题为当前文件名
       this.panel.title = panelTitle;
       // 在旁边打开（尝试创建新列）
@@ -61,7 +62,7 @@ export class TodoWebviewProvider {
       // 【R47.1】panel已存在时也要确保定时器监测正确的文件
       this.startPeriodicRefresh();
     } else {
-      console.log('[MDTODO-R47.1] 创建新的 panel');
+      // console.log('[MDTODO-R47.1] 创建新的 panel');
       // 【R51.2】使用 Beside 代替 Two，以实现对半分宽度
       // 当使用 Beside 时，VSCode 会自动分配相等的空间给两个列
       const activeEditor = vscode.window.activeTextEditor;
@@ -114,10 +115,11 @@ export class TodoWebviewProvider {
    * 每5秒检查一次文件是否有变化，如果有变化则自动刷新
    */
   private startPeriodicRefresh(): void {
-    console.log('[MDTODO-R47.1] startPeriodicRefresh() 被调用');
-    console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
-    console.log('[MDTODO-R47.1] panel 是否存在:', !!this.panel);
-    console.log('[MDTODO-R47.1] refreshTimer 当前状态:', this.refreshTimer ? '已存在' : '不存在');
+    // 【R54.1】注释掉 R47 调试日志
+    // console.log('[MDTODO-R47.1] startPeriodicRefresh() 被调用');
+    // console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
+    // console.log('[MDTODO-R47.1] panel 是否存在:', !!this.panel);
+    // console.log('[MDTODO-R47.1] refreshTimer 当前状态:', this.refreshTimer ? '已存在' : '不存在');
 
     // 先停止已有的定时器
     this.stopPeriodicRefresh();
@@ -127,7 +129,7 @@ export class TodoWebviewProvider {
 
     // 【R47.1】只有在有文件路径时才启动定时器
     if (!this.currentFilePath) {
-      console.log('[MDTODO-R47.1] 警告: currentFilePath 为空，不启动定时器');
+      // console.log('[MDTODO-R47.1] 警告: currentFilePath 为空，不启动定时器');
       return;
     }
 
@@ -136,20 +138,21 @@ export class TodoWebviewProvider {
       await this.checkAndRefresh();
     }, 1000);
 
-    console.log('[MDTODO-R47.2] 已启动定期刷新定时器（1秒周期），监测文件:', this.currentFilePath);
+    // console.log('[MDTODO-R47.2] 已启动定期刷新定时器（1秒周期），监测文件:', this.currentFilePath);
   }
 
   /**
    * 【实现R47.1】停止定期刷新定时器（添加调试日志）
    */
   private stopPeriodicRefresh(): void {
-    console.log('[MDTODO-R47.1] stopPeriodicRefresh() 被调用');
-    console.log('[MDTODO-R47.1] refreshTimer 当前状态:', this.refreshTimer ? '运行中' : '不存在');
+    // 【R54.1】注释掉 R47 调试日志
+    // console.log('[MDTODO-R47.1] stopPeriodicRefresh() 被调用');
+    // console.log('[MDTODO-R47.1] refreshTimer 当前状态:', this.refreshTimer ? '运行中' : '不存在');
 
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
       this.refreshTimer = undefined;
-      console.log('[MDTODO-R47.1] 已停止定期刷新定时器');
+      // console.log('[MDTODO-R47.1] 已停止定期刷新定时器');
     }
   }
 
@@ -157,26 +160,27 @@ export class TodoWebviewProvider {
    * 【实现R47.1】记录当前文件内容（添加详细调试日志）
    */
   private async recordCurrentFileContent(): Promise<void> {
-    console.log('[MDTODO-R47.1] recordCurrentFileContent() 被调用');
-    console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
+    // 【R54.1】注释掉 R47 调试日志
+    // console.log('[MDTODO-R47.1] recordCurrentFileContent() 被调用');
+    // console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
 
     if (!this.currentFilePath) {
-      console.log('[MDTODO-R47.1] currentFilePath 为空，跳过记录');
+      // console.log('[MDTODO-R47.1] currentFilePath 为空，跳过记录');
       return;
     }
 
     const fileExists = fs.existsSync(this.currentFilePath);
-    console.log('[MDTODO-R47.1] 文件是否存在:', fileExists);
+    // console.log('[MDTODO-R47.1] 文件是否存在:', fileExists);
 
     if (fileExists) {
       try {
         this.lastFileContent = fs.readFileSync(this.currentFilePath, 'utf-8');
-        console.log('[MDTODO-R47.1] 文件内容已记录，内容长度:', this.lastFileContent.length, '字符');
+        // console.log('[MDTODO-R47.1] 文件内容已记录，内容长度:', this.lastFileContent.length, '字符');
       } catch (error) {
-        console.error('[MDTODO-R47.1] 读取文件内容失败:', error);
+        // console.error('[MDTODO-R47.1] 读取文件内容失败:', error);
       }
     } else {
-      console.log('[MDTODO-R47.1] 文件不存在，无法记录内容');
+      // console.log('[MDTODO-R47.1] 文件不存在，无法记录内容');
     }
   }
 
@@ -218,17 +222,17 @@ export class TodoWebviewProvider {
       // console.log('[MDTODO-R47.1] 文件是否有变化:', hasChanges);
 
       if (hasChanges) {
-        console.log('[MDTODO-R47.1] 检测到文件变化，自动刷新...');
+        // console.log('[MDTODO-R47.1] 检测到文件变化，自动刷新...');
         await this.loadFile(this.currentFilePath);
         this.lastFileContent = currentContent;
-        console.log('[MDTODO-R47.1] 刷新完成，已更新记录');
+        // console.log('[MDTODO-R47.1] 刷新完成，已更新记录');
       } else {
         // console.log('[MDTODO-R47.1] 文件无变化，但定期检查链接状态...');
         // 【R47.1】文件无变化时也要定期检查链接状态
         await this.checkAndUpdateLinkStatus();
       }
     } catch (error) {
-      console.error('[MDTODO-R47.1] 检查文件变化失败:', error);
+      // console.error('[MDTODO-R47.1] 检查文件变化失败:', error);
     }
   }
 
@@ -263,7 +267,7 @@ export class TodoWebviewProvider {
 
         // 检查是否有变化
         if (task.linkCount !== linkStats.linkCount || task.linkExists !== linkStats.linkExists) {
-          console.log(`[MDTODO-R47.1] 任务 ${task.id} 链接状态变化: ${task.linkExists}/${task.linkCount} -> ${linkStats.linkExists}/${linkStats.linkCount}`);
+          // console.log(`[MDTODO-R47.1] 任务 ${task.id} 链接状态变化: ${task.linkExists}/${task.linkCount} -> ${linkStats.linkExists}/${linkStats.linkCount}`);
           task.linkCount = linkStats.linkCount;
           task.linkExists = linkStats.linkExists;
           hasLinkStatusChanges = true;
@@ -279,7 +283,7 @@ export class TodoWebviewProvider {
     await updateLinkStatusInTasks(this.currentTasks);
 
     if (hasLinkStatusChanges) {
-      console.log('[MDTODO-R47.1] 链接状态有变化，刷新 webview...');
+      // console.log('[MDTODO-R47.1] 链接状态有变化，刷新 webview...');
       this.sendToWebview();
     }
     // 注释掉无变化日志 - 【R51.9】
@@ -474,6 +478,10 @@ export class TodoWebviewProvider {
       case 'saveTextBlock':
         // 【R13.5】保存普通文本块内容
         await this.handleSaveTextBlock(message.blockId, message.content);
+        break;
+      case 'deleteLinkFile':
+        // 【R54.1】删除链接文件
+        await this.handleDeleteLinkFile(message.url);
         break;
     }
   }
@@ -902,6 +910,91 @@ export class TodoWebviewProvider {
     } catch (error) {
       console.error('[MDTODO] 打开链接失败:', error);
       vscode.window.showErrorMessage(`无法打开链接: ${error}`);
+    }
+  }
+
+  /**
+   * 【R54.1】删除链接文件
+   * 支持相对路径（如 ./docs/file.md、../file.md）和绝对路径/URL
+   * 只删除本地文件，不删除 HTTP/HTTPS 链接
+   */
+  private async handleDeleteLinkFile(url: string): Promise<void> {
+    try {
+      console.log('[MDTODO] handleDeleteLinkFile 收到 URL:', url);
+
+      // HTTP/HTTPS 链接不删除
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        vscode.window.showWarningMessage('无法删除网页链接');
+        return;
+      }
+
+      // 处理 file:// URL 协议
+      if (url.startsWith('file://')) {
+        url = url.slice(7);
+      }
+
+      // 处理可能的双重 URL 编码
+      let decodedUrl = decodeURIComponent(url);
+      if (decodedUrl !== decodedUrl.toLowerCase() || decodedUrl.includes('%25')) {
+        decodedUrl = decodeURIComponent(decodedUrl);
+      }
+      console.log('[MDTODO] 解码后的 URL:', decodedUrl);
+
+      // 判断是否为相对路径
+      const isRelativePath = !decodedUrl.startsWith('/') && !decodedUrl.match(/^[A-Za-z]:/);
+
+      let absolutePath: string;
+
+      if (isRelativePath) {
+        // 相对路径：基于当前文件路径解析
+        if (!this.currentFilePath) {
+          vscode.window.showWarningMessage('无法确定当前文件路径');
+          return;
+        }
+
+        const currentDir = path.dirname(this.currentFilePath);
+        absolutePath = path.resolve(currentDir, decodedUrl);
+        console.log('[MDTODO] 相对路径解析:', decodedUrl, '->', absolutePath);
+      } else {
+        absolutePath = decodedUrl;
+      }
+
+      // 检查文件是否存在
+      if (!fs.existsSync(absolutePath)) {
+        vscode.window.showWarningMessage(`文件不存在: ${absolutePath}`);
+        return;
+      }
+
+      // 检查是否为目录
+      const stat = fs.statSync(absolutePath);
+      if (stat.isDirectory()) {
+        vscode.window.showWarningMessage('无法删除目录，请手动处理');
+        return;
+      }
+
+      // 确认删除
+      const fileName = path.basename(absolutePath);
+      const choice = await vscode.window.showWarningMessage(
+        `确定要删除文件 "${fileName}" 吗？此操作不可恢复。`,
+        { modal: true },
+        '删除',
+        '取消'
+      );
+
+      if (choice === '删除') {
+        // 执行删除
+        fs.unlinkSync(absolutePath);
+        console.log('[MDTODO] 已删除文件:', absolutePath);
+        vscode.window.showInformationMessage(`已删除文件: ${fileName}`);
+
+        // 刷新 webview 以更新链接状态
+        this.updateWebview();
+      } else {
+        console.log('[MDTODO] 用户取消删除文件');
+      }
+    } catch (error) {
+      console.error('[MDTODO] 删除文件失败:', error);
+      vscode.window.showErrorMessage(`删除文件失败: ${error}`);
     }
   }
 

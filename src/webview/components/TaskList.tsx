@@ -121,6 +121,14 @@ const TaskList: React.FC<TaskListProps> = (props) => {
   const [isCollapseAllTriggered, setIsCollapseAllTriggered] = React.useState(false);
   // 【R51.9】标记跳转操作进行中，用于防止滚动到底效果干扰跳转
   const [isJumpOperationInProgress, setIsJumpOperationInProgress] = React.useState(false);
+  // 【R54.1】右键菜单状态
+  const [contextMenu, setContextMenu] = React.useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    href: string;
+    taskId: string;
+  } | null>(null);
 
   // 【R13.5】普通文本块编辑状态
   const [textBlockEditModes, setTextBlockEditModes] = React.useState<Record<string, boolean>>({});
@@ -172,8 +180,6 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       };
       return updateTask(prevTasks);
     });
-    // 确保任务展开
-    setExpandedTasks((prev) => new Set(prev).add(taskId));
     // 清除该任务的编辑状态（刷新标题意味着完成编辑）
     setEditModes((prev) => {
       const next = { ...prev };
@@ -746,8 +752,45 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         sendMessage({ type: 'openLink', url: href });
       }
     } else {
-      // 如果点击的不是链接，打印调试信息
-      console.log(`[Webview] 点击非链接元素:`, target.tagName, target.textContent?.substring(0, 50));
+      // 如果点击的不是链接，关闭右键菜单
+      closeContextMenu();
+    }
+  };
+
+  // 【R54.1】处理任务内容中的右键点击
+  const handleTaskContentContextMenu = (e: React.MouseEvent, taskId: string) => {
+    const target = e.target as HTMLElement;
+
+    // 查找最近的链接元素
+    const anchorElement = target.closest('a');
+
+    if (anchorElement) {
+      e.preventDefault();
+      e.stopPropagation();
+      const href = anchorElement.getAttribute('href');
+      if (href) {
+        // 显示右键菜单
+        setContextMenu({
+          visible: true,
+          x: e.clientX,
+          y: e.clientY,
+          href: href,
+          taskId: taskId
+        });
+      }
+    }
+  };
+
+  // 【R54.1】关闭右键菜单
+  const closeContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  // 【R54.1】删除链接文件
+  const handleDeleteLinkFile = () => {
+    if (contextMenu && contextMenu.href) {
+      sendMessage({ type: 'deleteLinkFile', url: contextMenu.href });
+      closeContextMenu();
     }
   };
 
@@ -971,6 +1014,9 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         console.log('[Webview] 点击文本块链接:', href);
         sendMessage({ type: 'openLink', url: href });
       }
+    } else {
+      // 点击非链接区域，关闭右键菜单
+      closeContextMenu();
     }
   };
 
@@ -1132,6 +1178,38 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     { type: 'active' as const, label: '未开始' },
     { type: 'processing' as const, label: '进行中' },
   ];
+
+  // 【R54.1】点击外部/滚动时关闭右键菜单
+  React.useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      setContextMenu((prev) => {
+        if (prev && prev.visible) {
+          const target = e.target as HTMLElement;
+          // 如果点击的不是右键菜单本身，则关闭菜单
+          if (!target.closest('.context-menu')) {
+            return null;
+          }
+        }
+        return prev;
+      });
+    };
+
+    const handleWheel = () => {
+      setContextMenu((prev) => {
+        if (prev && prev.visible) {
+          return null;
+        }
+        return prev;
+      });
+    };
+
+    document.addEventListener('click', handleClick);
+    document.addEventListener('wheel', handleWheel, { passive: true });
+    return () => {
+      document.removeEventListener('click', handleClick);
+      document.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   return React.createElement('div', { className: 'app' },
     React.createElement('header', { className: 'header' },
@@ -1378,6 +1456,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
               onDoubleClick: handleDoubleClick,
               onSaveComplete: handleSaveComplete,
               onTaskContentClick: handleTaskContentClick,
+              onTaskContentContextMenu: handleTaskContentContextMenu,
             })
           )
         )
@@ -1385,6 +1464,21 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     React.createElement('footer', { className: 'status-bar' },
       React.createElement('span', { className: 'file-path' }, currentFilePath || '未选择文件'),
       React.createElement('span', { className: 'stats' }, `共 ${stats.total} 个任务，${stats.completed} 已完成`)
+    ),
+    // 【R54.1】右键菜单
+    contextMenu && contextMenu.visible && React.createElement('div', {
+      className: 'context-menu',
+      style: {
+        left: contextMenu.x,
+        top: contextMenu.y,
+        position: 'fixed',
+        zIndex: 10000
+      }
+    },
+      React.createElement('div', {
+        className: 'context-menu-item',
+        onClick: handleDeleteLinkFile
+      }, '删除链接文件')
     )
   );
 };
@@ -1395,24 +1489,25 @@ const TaskItem: React.FC<{
   expandedTasks: Set<string>;
   editModes: Record<string, boolean>;
   claudeExecuting: Record<string, boolean>;
-  buttonCooldown: Record<string, boolean>;  // 按钮冷却状态 - 【修复R38.1】改为每个按钮独立防抖
-  editingTaskParentId: string;  // 【修复R48.3】当前编辑任务的父任务ID
-  highlightedTaskId: string;  // 【R51.9】高亮定位状态
-  isCollapseAllTriggered: boolean;  // 【R51.9】标记"全部收起"操作
-  isJumpOperationInProgress: boolean;  // 【R51.9】标记跳转操作进行中
+  buttonCooldown: Record<string, boolean>;
+  editingTaskParentId: string;
+  highlightedTaskId: string;
+  isCollapseAllTriggered: boolean;
+  isJumpOperationInProgress: boolean;
   onToggleExpand: (taskId: string) => void;
   onToggleComplete: (taskId: string) => void;
   onSelect: (taskId: string) => void;
-  onToggleEdit: (taskId: string) => void;  // 保留，用于Escape键取消编辑
+  onToggleEdit: (taskId: string) => void;
   onSaveTitle: (taskId: string, title: string) => void;
   onClaudeExecute: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onAddSubTask: (taskId: string) => void;
-  onContinueTask: (taskId: string) => void;  // 【实现R46】延续任务
-  isLastChild: boolean;  // 【实现R46】是否为最后一个子任务
+  onContinueTask: (taskId: string) => void;
+  isLastChild: boolean;
   onDoubleClick: (taskId: string) => void;
-  onSaveComplete?: (taskId: string) => void;  // 保存完成后退出编辑模式的回调
-  onTaskContentClick?: (e: React.MouseEvent, taskId: string) => void;  // 任务内容链接点击回调
+  onSaveComplete?: (taskId: string) => void;
+  onTaskContentClick?: (e: React.MouseEvent, taskId: string) => void;
+  onTaskContentContextMenu?: (e: React.MouseEvent, taskId: string) => void;
 }> = (props) => {
   const {
     task,
@@ -1438,6 +1533,7 @@ const TaskItem: React.FC<{
     onDoubleClick,
     onSaveComplete,
     onTaskContentClick,
+    onTaskContentContextMenu,
   } = props;
 
   const titleInputRef = React.useRef<HTMLTextAreaElement>(null);
@@ -1792,6 +1888,11 @@ const TaskItem: React.FC<{
                       onTaskContentClick(e, task.id);
                     }
                   },
+                  onContextMenu: (e: React.MouseEvent) => {
+                    if (onTaskContentContextMenu) {
+                      onTaskContentContextMenu(e, task.id);
+                    }
+                  },
                   style: { cursor: 'pointer' }
                 })
           )
@@ -1835,6 +1936,7 @@ const TaskItem: React.FC<{
           onDoubleClick,
           onSaveComplete,
           onTaskContentClick,
+          onTaskContentContextMenu,
         })
       ),
       // 【实现R51.3】底部滚动阴影 - 使用sticky定位
