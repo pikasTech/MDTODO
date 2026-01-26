@@ -6,6 +6,10 @@ import { TodoTask, TodoFile, TextBlock } from '../types';
 import { FileService } from '../services/fileService';
 import { generateClaudeExecuteArgs } from '../services/claudeService';
 import { TyporaService } from './services/typoraService';
+import { ScrollSyncManager } from './scrollSyncManager';
+import { LinkHandler } from './linkHandler';
+import { FileRefreshManager } from './fileRefreshManager';
+import { TaskStatusManager } from './taskStatusManager';
 
 export class TodoWebviewProvider {
   private panel: vscode.WebviewPanel | undefined;
@@ -14,14 +18,20 @@ export class TodoWebviewProvider {
   private currentTextBlocks: TextBlock[] = [];
   private currentFilePath: string = '';
   private resolveCallback: ((task: TodoTask) => void) | undefined;
-  // 【实现R29.1】滚动同步焦点状态：'editor' = VSCode编辑器主动，'webview' = webview主动
-  private scrollSyncActiveView: 'editor' | 'webview' = 'editor';
-  // 【实现R47】定期刷新定时器
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private lastFileContent: string = '';
+
+  // 管理器实例
+  private scrollSyncManager!: ScrollSyncManager;
+  private linkHandler!: LinkHandler;
+  private fileRefreshManager!: FileRefreshManager;
+  private taskStatusManager!: TaskStatusManager;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
+    // 初始化管理器
+    this.scrollSyncManager = new ScrollSyncManager(context, [], '', undefined);
+    this.linkHandler = new LinkHandler('', undefined);
+    this.fileRefreshManager = new FileRefreshManager();
+    this.taskStatusManager = new TaskStatusManager();
   }
 
   /**
@@ -62,7 +72,7 @@ export class TodoWebviewProvider {
       // panel 已存在，直接发送数据
       this.sendToWebview();
       // 【R47.1】panel已存在时也要确保定时器监测正确的文件
-      this.startPeriodicRefresh();
+      this.fileRefreshManager.startPeriodicRefresh();
     } else {
       // console.log('[MDTODO-R47.1] 创建新的 panel');
       // 【R51.2】使用 Beside 代替 Two，以实现对半分宽度
@@ -87,7 +97,7 @@ export class TodoWebviewProvider {
       this.panel.webview.html = this.getHtmlContent();
 
       // 【实现R29】设置滚动同步监听
-      this.setupScrollSync();
+      this.scrollSyncManager.setupScrollSync();
 
       this.panel.webview.onDidReceiveMessage(
         this.handleMessage.bind(this),
@@ -99,258 +109,17 @@ export class TodoWebviewProvider {
         () => {
           this.panel = undefined;
           // 【实现R47】停止定期刷新定时器
-          this.stopPeriodicRefresh();
+          this.fileRefreshManager.stopPeriodicRefresh();
         },
         undefined,
         this.context.subscriptions
       );
 
-      // 【实现R47】启动定期刷新定时器（5秒周期）
-      this.startPeriodicRefresh();
+      // 【实现R47】启动定期刷新定时器
+      this.fileRefreshManager.startPeriodicRefresh();
 
       // 不再这里调用 updateWebview，改为等待 webview ready 消息
     }
-  }
-
-  /**
-   * 【实现R47.1】启动定期刷新定时器（添加详细调试日志）
-   * 每5秒检查一次文件是否有变化，如果有变化则自动刷新
-   */
-  private startPeriodicRefresh(): void {
-    // 【R54.1】注释掉 R47 调试日志
-    // console.log('[MDTODO-R47.1] startPeriodicRefresh() 被调用');
-    // console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
-    // console.log('[MDTODO-R47.1] panel 是否存在:', !!this.panel);
-    // console.log('[MDTODO-R47.1] refreshTimer 当前状态:', this.refreshTimer ? '已存在' : '不存在');
-
-    // 先停止已有的定时器
-    this.stopPeriodicRefresh();
-
-    // 记录当前文件内容用于比较
-    this.recordCurrentFileContent();
-
-    // 【R47.1】只有在有文件路径时才启动定时器
-    if (!this.currentFilePath) {
-      // console.log('[MDTODO-R47.1] 警告: currentFilePath 为空，不启动定时器');
-      return;
-    }
-
-    // 启动1秒周期的定时器【R47.2】
-    this.refreshTimer = setInterval(async () => {
-      await this.checkAndRefresh();
-    }, 1000);
-
-    // console.log('[MDTODO-R47.2] 已启动定期刷新定时器（1秒周期），监测文件:', this.currentFilePath);
-  }
-
-  /**
-   * 【实现R47.1】停止定期刷新定时器（添加调试日志）
-   */
-  private stopPeriodicRefresh(): void {
-    // 【R54.1】注释掉 R47 调试日志
-    // console.log('[MDTODO-R47.1] stopPeriodicRefresh() 被调用');
-    // console.log('[MDTODO-R47.1] refreshTimer 当前状态:', this.refreshTimer ? '运行中' : '不存在');
-
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-      // console.log('[MDTODO-R47.1] 已停止定期刷新定时器');
-    }
-  }
-
-  /**
-   * 【实现R47.1】记录当前文件内容（添加详细调试日志）
-   */
-  private async recordCurrentFileContent(): Promise<void> {
-    // 【R54.1】注释掉 R47 调试日志
-    // console.log('[MDTODO-R47.1] recordCurrentFileContent() 被调用');
-    // console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
-
-    if (!this.currentFilePath) {
-      // console.log('[MDTODO-R47.1] currentFilePath 为空，跳过记录');
-      return;
-    }
-
-    const fileExists = fs.existsSync(this.currentFilePath);
-    // console.log('[MDTODO-R47.1] 文件是否存在:', fileExists);
-
-    if (fileExists) {
-      try {
-        this.lastFileContent = fs.readFileSync(this.currentFilePath, 'utf-8');
-        // console.log('[MDTODO-R47.1] 文件内容已记录，内容长度:', this.lastFileContent.length, '字符');
-      } catch (error) {
-        // console.error('[MDTODO-R47.1] 读取文件内容失败:', error);
-      }
-    } else {
-      // console.log('[MDTODO-R47.1] 文件不存在，无法记录内容');
-    }
-  }
-
-  /**
-   * 【实现R47.1】检查文件是否有变化，并定期更新链接状态
-   */
-  private async checkAndRefresh(): Promise<void> {
-    // 注释掉高频日志 - 【R51.9】
-    // console.log('[MDTODO-R47.1] checkAndRefresh() 定时器触发执行');
-    // console.log('[MDTODO-R47.1] currentFilePath:', this.currentFilePath);
-    // console.log('[MDTODO-R47.1] panel 是否存在:', !!this.panel);
-
-    // 【R47.1】检查必要条件
-    if (!this.currentFilePath) {
-      // console.log('[MDTODO-R47.1] currentFilePath 为空，跳过刷新检查');
-      return;
-    }
-
-    if (!this.panel) {
-      // console.log('[MDTODO-R47.1] panel 不存在，跳过刷新检查');
-      return;
-    }
-
-    const fileExists = fs.existsSync(this.currentFilePath);
-    // console.log('[MDTODO-R47.1] 监测文件是否存在:', fileExists);
-
-    if (!fileExists) {
-      // console.log('[MDTODO-R47.1] 监测文件不存在，跳过刷新检查');
-      return;
-    }
-
-    try {
-      const currentContent = fs.readFileSync(this.currentFilePath, 'utf-8');
-      // console.log('[MDTODO-R47.1] 读取到文件内容，长度:', currentContent.length, '字符');
-      // console.log('[MDTODO-R47.1] 记录的文件内容长度:', this.lastFileContent.length, '字符');
-
-      // 比较文件内容是否有变化
-      const hasChanges = currentContent !== this.lastFileContent;
-      // console.log('[MDTODO-R47.1] 文件是否有变化:', hasChanges);
-
-      if (hasChanges) {
-        // console.log('[MDTODO-R47.1] 检测到文件变化，自动刷新...');
-        await this.loadFile(this.currentFilePath);
-        this.lastFileContent = currentContent;
-        // console.log('[MDTODO-R47.1] 刷新完成，已更新记录');
-      } else {
-        // console.log('[MDTODO-R47.1] 文件无变化，但定期检查链接状态...');
-        // 【R47.1】文件无变化时也要定期检查链接状态
-        await this.checkAndUpdateLinkStatus();
-      }
-    } catch (error) {
-      // console.error('[MDTODO-R47.1] 检查文件变化失败:', error);
-    }
-  }
-
-  /**
-   * 【实现R47.1】检查并更新所有任务的链接状态
-   * 用于定期刷新时检测新创建的链接文件
-   */
-  private async checkAndUpdateLinkStatus(): Promise<void> {
-    if (!this.currentFilePath || this.currentTasks.length === 0) {
-      return;
-    }
-
-    // 注释掉高频日志 - 【R51.9】
-    // console.log('[MDTODO-R47.1] 开始检查链接状态...');
-
-    // 重新解析文件以获取最新的链接状态
-    const { TodoParser } = await import('../parser');
-    const parser = new TodoParser();
-
-    // 读取文件内容
-    const content = fs.readFileSync(this.currentFilePath, 'utf-8');
-
-    // 使用 parser 重新解析任务（只保留任务结构，不重新加载）
-    // 我们需要更新每个任务的 linkCount 和 linkExists
-    let hasLinkStatusChanges = false;
-
-    // 遍历当前任务，更新链接状态
-    const updateLinkStatusInTasks = async (tasks: any[]) => {
-      for (const task of tasks) {
-        // 从原始内容计算链接状态
-        const linkStats = await this.calculateLinkStatsForTask(task.rawContent || task.description, content);
-
-        // 检查是否有变化
-        if (task.linkCount !== linkStats.linkCount || task.linkExists !== linkStats.linkExists) {
-          // console.log(`[MDTODO-R47.1] 任务 ${task.id} 链接状态变化: ${task.linkExists}/${task.linkCount} -> ${linkStats.linkExists}/${linkStats.linkCount}`);
-          task.linkCount = linkStats.linkCount;
-          task.linkExists = linkStats.linkExists;
-          hasLinkStatusChanges = true;
-        }
-
-        // 递归处理子任务
-        if (task.children && task.children.length > 0) {
-          await updateLinkStatusInTasks(task.children);
-        }
-      }
-    };
-
-    await updateLinkStatusInTasks(this.currentTasks);
-
-    if (hasLinkStatusChanges) {
-      // console.log('[MDTODO-R47.1] 链接状态有变化，刷新 webview...');
-      this.sendToWebview();
-    }
-    // 注释掉无变化日志 - 【R51.9】
-    // else {
-    //   console.log('[MDTODO-R47.1] 链接状态无变化');
-    // }
-  }
-
-  /**
-   * 【实现R47.1】计算任务的链接统计信息
-   * 从原始内容中提取链接并检查是否存在
-   */
-  private async calculateLinkStatsForTask(content: string, fullContent: string): Promise<{ linkCount: number; linkExists: number }> {
-    // 从任务内容中提取链接
-    const linkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
-    const links: string[] = [];
-    let match;
-
-    while ((match = linkRegex.exec(content)) !== null) {
-      const url = match[2].trim();
-      // 排除锚点链接和 mailto 链接
-      if (url && !url.startsWith('#') && !url.startsWith('mailto:')) {
-        links.push(url);
-      }
-    }
-
-    // 检查每个链接是否存在
-    let existsCount = 0;
-    for (const link of links) {
-      const absolutePath = this.resolveLinkPath(link);
-      if (fs.existsSync(absolutePath)) {
-        existsCount++;
-      }
-    }
-
-    return {
-      linkCount: links.length,
-      linkExists: existsCount
-    };
-  }
-
-  /**
-   * 【实现R47.1】解析链接为绝对路径
-   */
-  private resolveLinkPath(link: string): string {
-    // 处理 file:// URL 协议
-    if (link.startsWith('file://')) {
-      link = link.slice(7);
-    }
-
-    // 处理 URL 编码
-    let decodedLink = decodeURIComponent(link);
-    if (decodedLink !== decodedLink.toLowerCase() || decodedLink.includes('%25')) {
-      decodedLink = decodeURIComponent(decodedLink);
-    }
-
-    // 判断是否为相对路径
-    const isRelativePath = !decodedLink.startsWith('/') && !decodedLink.match(/^[A-Za-z]:/);
-
-    if (isRelativePath && this.currentFilePath) {
-      const currentDir = path.dirname(this.currentFilePath);
-      return path.resolve(currentDir, decodedLink);
-    }
-
-    return decodedLink;
   }
 
   /**
@@ -519,7 +288,7 @@ export class TodoWebviewProvider {
    */
   private async handleWebviewScrolled(taskId: string, lineNumber: number): Promise<void> {
     // 【实现R29.1】检查webview是否是当前主动视图
-    if (this.scrollSyncActiveView !== 'webview') {
+    if (this.scrollSyncManager.getActiveView() !== 'webview') {
       return;
     }
 
@@ -549,61 +318,7 @@ export class TodoWebviewProvider {
    * 【实现R29.1】根据焦点状态决定是否同步：只有当editor是主动视图时才同步
    */
   public setupScrollSync(): void {
-    // 监听编辑器可见范围变化（滚动事件）
-    vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
-      const editor = event.textEditor;
-
-      // 【实现R29.1】检查editor是否是当前主动视图
-      if (this.scrollSyncActiveView !== 'editor') {
-        return;
-      }
-
-      // 检查是否是当前打开的TODO文件
-      if (!this.currentFilePath || !editor) {
-        return;
-      }
-
-      if (editor.document.uri.fsPath !== this.currentFilePath) {
-        return;
-      }
-
-      // 获取可见范围的第一行
-      const visibleRanges = editor.visibleRanges;
-      if (visibleRanges.length > 0) {
-        const firstVisibleLine = visibleRanges[0].start.line;
-
-        // 查找最接近当前可见行的任务
-        const nearestTask = this.findNearestTask(firstVisibleLine);
-
-        if (nearestTask && this.panel) {
-          // 发送滚动位置到webview
-          this.panel.webview.postMessage({
-            type: 'scrollToTask',
-            taskId: nearestTask.id,
-            lineNumber: nearestTask.lineNumber
-          });
-        }
-      }
-    }, undefined, this.context.subscriptions);
-
-    // 【实现R29.1】监听编辑器焦点变化
-    vscode.window.onDidChangeActiveTextEditor((editor) => {
-      // 当用户切换到编辑器时，editor成为主动视图
-      if (editor && this.currentFilePath && editor.document.uri.fsPath === this.currentFilePath) {
-        this.scrollSyncActiveView = 'editor';
-        console.log('[MDTODO] 滚动同步：编辑器成为主动视图');
-      }
-    });
-
-    // 【实现R29.1】监听webview面板焦点变化
-    if (this.panel) {
-      this.panel.onDidChangeViewState((event) => {
-        if (event.webviewPanel.active) {
-          this.scrollSyncActiveView = 'webview';
-          console.log('[MDTODO] 滚动同步：webview成为主动视图');
-        }
-      });
-    }
+    this.scrollSyncManager.setupScrollSync();
   }
 
   /**
@@ -611,32 +326,7 @@ export class TodoWebviewProvider {
    * 由webview调用，当用户点击或滚动webview时触发
    */
   public setWebviewAsActive(): void {
-    this.scrollSyncActiveView = 'webview';
-    console.log('[MDTODO] 滚动同步：webview成为主动视图（用户交互）');
-  }
-
-  /**
-   * 查找最接近指定行号的任务
-   */
-  private findNearestTask(lineNumber: number): TodoTask | undefined {
-    let nearestTask: TodoTask | undefined;
-    let minDistance = Infinity;
-
-    const findInTasks = (taskList: TodoTask[]) => {
-      for (const task of taskList) {
-        const distance = Math.abs(task.lineNumber - lineNumber);
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestTask = task;
-        }
-        if (task.children && task.children.length > 0) {
-          findInTasks(task.children);
-        }
-      }
-    };
-
-    findInTasks(this.currentTasks);
-    return nearestTask;
+    this.scrollSyncManager.setWebviewAsActive();
   }
 
   /**
@@ -875,69 +565,7 @@ export class TodoWebviewProvider {
    * .md 文件默认使用 Typora 打开
    */
   private async handleOpenLink(url: string): Promise<void> {
-    try {
-      console.log('[MDTODO] handleOpenLink 收到 URL:', url);
-
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        // 网页链接：在外部浏览器中打开
-        await vscode.env.openExternal(vscode.Uri.parse(url));
-        console.log('[MDTODO] 已打开网页链接:', url);
-      } else {
-        // 处理 file:// URL 协议
-        if (url.startsWith('file://')) {
-          // 移除 file:// 前缀
-          url = url.slice(7);
-        }
-
-        // 处理可能的双重 URL 编码
-        // 如果包含 %25（编码的 %），说明被编码了两次
-        let decodedUrl = decodeURIComponent(url);
-        if (decodedUrl !== decodedUrl.toLowerCase() || decodedUrl.includes('%25')) {
-          // 尝试再次解码
-          decodedUrl = decodeURIComponent(decodedUrl);
-        }
-        console.log('[MDTODO] 解码后的 URL:', decodedUrl);
-
-        // 【修复R31.4】支持不带 ./ 前缀的相对路径，如 (xxx/) 或 (docs/file.md)
-        // 相对路径不以 / 开头（Unix绝对路径），也不包含盘符（Windows绝对路径）
-        const isRelativePath = !decodedUrl.startsWith('/') && !decodedUrl.match(/^[A-Za-z]:/);
-
-        let absolutePath: string;
-
-        if (isRelativePath) {
-          // 相对路径：基于当前文件路径解析
-          if (!this.currentFilePath) {
-            vscode.window.showWarningMessage('无法确定当前文件路径');
-            return;
-          }
-
-          // 获取当前文件的目录
-          const currentDir = path.dirname(this.currentFilePath);
-          // 解析相对路径为绝对路径
-          absolutePath = path.resolve(currentDir, decodedUrl);
-          console.log('[MDTODO] 相对路径解析:', decodedUrl, '->', absolutePath);
-        } else {
-          absolutePath = decodedUrl;
-        }
-
-        // 【实现R31.5】判断是否为 .md 文件
-        const isMarkdownFile = absolutePath.toLowerCase().endsWith('.md');
-
-        if (isMarkdownFile) {
-          // 使用 Typora 打开 md 文件
-          const typoraService = new TyporaService();
-          await typoraService.openWithTypora(absolutePath);
-        } else {
-          // 其他文件使用 VSCode 打开
-          const uri = vscode.Uri.file(absolutePath);
-          await vscode.window.showTextDocument(uri);
-          console.log('[MDTODO] 已打开文档:', absolutePath);
-        }
-      }
-    } catch (error) {
-      console.error('[MDTODO] 打开链接失败:', error);
-      vscode.window.showErrorMessage(`无法打开链接: ${error}`);
-    }
+    await this.linkHandler.handleOpenLink(url);
   }
 
   /**
@@ -946,83 +574,7 @@ export class TodoWebviewProvider {
    * 只删除本地文件，不删除 HTTP/HTTPS 链接
    */
   private async handleDeleteLinkFile(url: string): Promise<void> {
-    try {
-      console.log('[MDTODO] handleDeleteLinkFile 收到 URL:', url);
-
-      // HTTP/HTTPS 链接不删除
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        vscode.window.showWarningMessage('无法删除网页链接');
-        return;
-      }
-
-      // 处理 file:// URL 协议
-      if (url.startsWith('file://')) {
-        url = url.slice(7);
-      }
-
-      // 处理可能的双重 URL 编码
-      let decodedUrl = decodeURIComponent(url);
-      if (decodedUrl !== decodedUrl.toLowerCase() || decodedUrl.includes('%25')) {
-        decodedUrl = decodeURIComponent(decodedUrl);
-      }
-      console.log('[MDTODO] 解码后的 URL:', decodedUrl);
-
-      // 判断是否为相对路径
-      const isRelativePath = !decodedUrl.startsWith('/') && !decodedUrl.match(/^[A-Za-z]:/);
-
-      let absolutePath: string;
-
-      if (isRelativePath) {
-        // 相对路径：基于当前文件路径解析
-        if (!this.currentFilePath) {
-          vscode.window.showWarningMessage('无法确定当前文件路径');
-          return;
-        }
-
-        const currentDir = path.dirname(this.currentFilePath);
-        absolutePath = path.resolve(currentDir, decodedUrl);
-        console.log('[MDTODO] 相对路径解析:', decodedUrl, '->', absolutePath);
-      } else {
-        absolutePath = decodedUrl;
-      }
-
-      // 检查文件是否存在
-      if (!fs.existsSync(absolutePath)) {
-        vscode.window.showWarningMessage(`文件不存在: ${absolutePath}`);
-        return;
-      }
-
-      // 检查是否为目录
-      const stat = fs.statSync(absolutePath);
-      if (stat.isDirectory()) {
-        vscode.window.showWarningMessage('无法删除目录，请手动处理');
-        return;
-      }
-
-      // 确认删除
-      const fileName = path.basename(absolutePath);
-      const choice = await vscode.window.showWarningMessage(
-        `确定要删除文件 "${fileName}" 吗？此操作不可恢复。`,
-        { modal: true },
-        '删除',
-        '取消'
-      );
-
-      if (choice === '删除') {
-        // 执行删除
-        fs.unlinkSync(absolutePath);
-        console.log('[MDTODO] 已删除文件:', absolutePath);
-        vscode.window.showInformationMessage(`已删除文件: ${fileName}`);
-
-        // 刷新 webview 以更新链接状态
-        this.updateWebview();
-      } else {
-        console.log('[MDTODO] 用户取消删除文件');
-      }
-    } catch (error) {
-      console.error('[MDTODO] 删除文件失败:', error);
-      vscode.window.showErrorMessage(`删除文件失败: ${error}`);
-    }
+    await this.linkHandler.handleDeleteLinkFile(url);
   }
 
   /**
@@ -1105,6 +657,8 @@ export class TodoWebviewProvider {
         this.currentTasks = tasks;
         this.currentTextBlocks = textBlocks;
         this.currentFilePath = filePath;
+        // 更新管理器状态
+        this.updateManagersState();
         this.updateWebview();
         return true;
       } else {
@@ -1115,6 +669,22 @@ export class TodoWebviewProvider {
       console.error('[MDTODO] Error loading file:', error);
       return false;
     }
+  }
+
+  /**
+   * 更新所有管理器的内部状态
+   */
+  private updateManagersState(): void {
+    this.scrollSyncManager.updateState(this.currentTasks, this.currentFilePath, this.panel);
+    this.linkHandler.updateState(this.currentFilePath, this.panel);
+    this.fileRefreshManager.updateState(this.currentFilePath, this.currentTasks, this.currentTextBlocks);
+    this.taskStatusManager.updateState(this.currentFilePath, this.currentTasks);
+
+    // 设置 FileRefreshManager 的回调
+    this.fileRefreshManager.setCallbacks(
+      (filePath: string) => this.loadFile(filePath),
+      () => this.sendToWebview()
+    );
   }
 
   /**
@@ -1143,26 +713,30 @@ export class TodoWebviewProvider {
         this.currentTasks = tasks;
         this.currentTextBlocks = textBlocks;
         this.currentFilePath = filePath;
+        // 更新管理器状态
+        this.updateManagersState();
         // 【R34.2】加载文件后更新面板标题
         this.updatePanelTitle();
         this.updateWebview();
         // 【实现R47】记录文件内容用于后续比较
-        await this.recordCurrentFileContent();
+        await this.fileRefreshManager.recordCurrentFileContent();
         // 【R47.2】确保在 loadFile 后启动定期刷新定时器
-        this.startPeriodicRefresh();
+        this.fileRefreshManager.startPeriodicRefresh();
         return true;
       } else {
         console.log('[MDTODO] Format not matched, setting empty state');
         // 格式不匹配时，仍显示文件名但任务列表为空
         this.currentTasks = [];
         this.currentFilePath = filePath;
+        // 更新管理器状态
+        this.updateManagersState();
         // 【R34.2】加载文件后更新面板标题
         this.updatePanelTitle();
         this.updateWebview();
         // 【实现R47】记录文件内容用于后续比较
-        await this.recordCurrentFileContent();
+        await this.fileRefreshManager.recordCurrentFileContent();
         // 【R47.2】确保在 loadFile 后启动定期刷新定时器
-        this.startPeriodicRefresh();
+        this.fileRefreshManager.startPeriodicRefresh();
         return false;
       }
     } catch (error: any) {
@@ -1212,7 +786,7 @@ export class TodoWebviewProvider {
 
     try {
       // 1. 添加 [in_progress] 标记
-      await this.markTaskAsProcessing(taskId, true);
+      await this.taskStatusManager.markTaskAsProcessing(taskId, true);
       // 刷新显示
       await this.loadFile(this.currentFilePath);
 
@@ -1225,80 +799,11 @@ export class TodoWebviewProvider {
       // 或者实现一个机制来检测 Claude 执行完成
     } catch (error: any) {
       // 如果执行失败，也移除 [in_progress] 标记
-      await this.markTaskAsProcessing(taskId, false);
+      await this.taskStatusManager.markTaskAsProcessing(taskId, false);
       await this.loadFile(this.currentFilePath);
       console.error('[MDTODO] Error in Claude execute:', error);
       vscode.window.showErrorMessage(`执行失败: ${error.message}`);
     }
-  }
-
-  /**
-   * 设置任务的 [in_progress] 状态
-   */
-  private async markTaskAsProcessing(taskId: string, isProcessing: boolean): Promise<void> {
-    const fileService = new FileService();
-    const content = await fileService.readFile(vscode.Uri.file(this.currentFilePath));
-    const lines = content.split('\n');
-
-    // 找到任务所在的行（必须是 ## 或 ### 开头的任务标题行）
-    let taskLineIndex = -1;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      // 必须匹配 ## 或 ### 或 #### 开头的任务标题行，使用精确匹配避免匹配到描述行
-      // 格式如: ## R17, ### R17.1, #### R17.1.1, ## R17 [completed]
-      // 【修复R43】支持更多级别的标题（2-6个#），以匹配多级任务如 R1.1.1
-      const taskHeaderPattern = new RegExp(`^#{2,6}\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
-      if (taskHeaderPattern.test(line)) {
-        taskLineIndex = i;
-        break;
-      }
-    }
-
-    if (taskLineIndex === -1) {
-      console.warn(`[MDTODO] 未找到任务 ${taskId}，无法设置 in_progress 状态`);
-      return;
-    }
-
-    const line = lines[taskLineIndex];
-    const hasCompleted = line.includes('[completed]');
-    const hasInProgress = line.includes('[in_progress]');
-
-    // 如果已经有 [completed]，不添加 [in_progress]
-    if (hasCompleted) {
-      console.warn(`[MDTODO] 任务 ${taskId} 已完成，不添加 in_progress 标记`);
-      return;
-    }
-
-    // 如果状态已经是我们要设置的状态，不做修改
-    if (isProcessing && hasInProgress) return;
-    if (!isProcessing && !hasInProgress) return;
-
-    // 添加或移除 [in_progress] 标记
-    // 任务行格式如: ## R17, ### R17.1, ## R17 [completed]
-    // [in_progress] 应该添加在任务ID之后，其他标记之前
-    if (isProcessing) {
-      // 在任务ID后添加 [in_progress]，在可能存在的 [completed] 之前
-      const taskIdPattern = new RegExp(`(${taskId.replace(/\./g, '\\.')})(\\s*\\[)`);
-      if (taskIdPattern.test(line)) {
-        // 有其他标记（如 [completed]），在ID和标记之间插入
-        lines[taskLineIndex] = line.replace(taskIdPattern, '$1 [in_progress]$2');
-      } else {
-        // 没有其他标记，直接在ID后添加
-        lines[taskLineIndex] = line.replace(taskIdPattern, '$1 [in_progress]$2');
-        // 如果上面的替换没生效（可能ID不在最后），尝试简单替换
-        if (lines[taskLineIndex] === line) {
-          const simplePattern = new RegExp(`(${taskId.replace(/\./g, '\\.')})(\\s*)$`);
-          lines[taskLineIndex] = line.replace(simplePattern, '$1 [in_progress]$2');
-        }
-      }
-    } else {
-      // 移除 [in_progress] 标记
-      lines[taskLineIndex] = line.replace(/\s*\[in_progress\]/, '');
-    }
-
-    const newContent = lines.join('\n');
-    await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-    console.log(`[MDTODO] 任务 ${taskId} in_progress状态设置为: ${isProcessing}`);
   }
 
   /**
@@ -1320,79 +825,12 @@ export class TodoWebviewProvider {
 
     // 切换完成状态：如果已完成则移除标记，否则添加标记
     const isComplete = !task.completed;
-    await this.markTaskAsFinished(taskId, isComplete);
+    await this.taskStatusManager.markTaskAsFinished(taskId, isComplete);
 
     // 重新加载文件并刷新显示
     await this.loadFile(this.currentFilePath);
 
     vscode.window.showInformationMessage(`任务 ${taskId} 已${isComplete ? '标记完成' : '取消完成'}`);
-  }
-
-  /**
-   * 设置任务的 [completed] 状态
-   * 添加或移除 [completed] 标记，支持处理 [in_progress] 标记
-   * 【R26.2】允许在 Processing 状态下标记完成，同时移除 Processing 标记
-   */
-  private async markTaskAsFinished(taskId: string, isFinished: boolean): Promise<void> {
-    const fileService = new FileService();
-    const content = await fileService.readFile(vscode.Uri.file(this.currentFilePath));
-    const lines = content.split('\n');
-
-    // 找到任务所在的行（必须是 ## 或 ### 或 #### 开头的任务标题行）
-    let taskLineIndex = -1;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      // 必须匹配 ## 或 ### 或 #### 开头的任务标题行，使用精确匹配避免匹配到描述行
-      // 格式如: ## R26, ### R26.1, #### R26.1.1, ## R26 [completed], ## R26 [in_progress]
-      // 【修复R43】支持更多级别的标题（2-6个#），以匹配多级任务如 R1.1.1
-      const taskHeaderPattern = new RegExp(`^#{2,6}\\s+[^\\n]*\\b${taskId.replace(/\./g, '\\.')}(?:[)\\s]|$)`);
-      if (taskHeaderPattern.test(line)) {
-        taskLineIndex = i;
-        break;
-      }
-    }
-
-    if (taskLineIndex === -1) {
-      console.warn(`[MDTODO] 未找到任务 ${taskId}，无法设置 completed 状态`);
-      return;
-    }
-
-    const line = lines[taskLineIndex];
-    const hasCompleted = line.includes('[completed]');
-    const hasInProgress = line.includes('[in_progress]');
-
-    // 如果状态已经是我们要设置的状态，不做修改
-    if (isFinished && hasCompleted) return;
-    if (!isFinished && !hasCompleted) return;
-
-    // 【R26.2】允许在 Processing 状态下标记完成，同时移除 Processing 标记
-    // 不再检查 hasInProgress，允许用户直接完成任务
-
-    // 添加或移除 [completed] 标记
-    // 任务行格式如: ## R26, ### R26.1, ## R26 [in_progress]
-    // 【R26.2】[completed] 应该添加在任务ID之后，同时移除 [in_progress] 标记
-    if (isFinished) {
-      // 在任务ID后添加 [completed]，并移除 [in_progress] 标记
-      let newLine = line;
-
-      // 如果有 [in_progress] 标记，先移除它
-      if (hasInProgress) {
-        newLine = newLine.replace(/\s*\[in_progress\]/, '');
-      }
-
-      // 然后添加 [completed] 标记
-      const taskIdPattern = new RegExp(`(${taskId.replace(/\./g, '\\.')})(\\s*)$`);
-      newLine = newLine.replace(taskIdPattern, '$1 [completed]');
-
-      lines[taskLineIndex] = newLine;
-    } else {
-      // 移除 [completed] 标记
-      lines[taskLineIndex] = line.replace(/\s*\[completed\]/, '');
-    }
-
-    const newContent = lines.join('\n');
-    await fileService.writeFile(vscode.Uri.file(this.currentFilePath), newContent);
-    console.log(`[MDTODO] 任务 ${taskId} completed状态设置为: ${isFinished}`);
   }
 
   /**
@@ -1847,6 +1285,8 @@ export class TodoWebviewProvider {
   refresh(tasks: TodoTask[], filePath: string): void {
     this.currentTasks = tasks;
     this.currentFilePath = filePath;
+    // 更新管理器状态
+    this.updateManagersState();
     this.updateWebview();
   }
 
@@ -1855,7 +1295,7 @@ export class TodoWebviewProvider {
    */
   dispose(): void {
     // 【实现R47】停止定期刷新定时器
-    this.stopPeriodicRefresh();
+    this.fileRefreshManager.stopPeriodicRefresh();
     if (this.panel) {
       this.panel.dispose();
       this.panel = undefined;
