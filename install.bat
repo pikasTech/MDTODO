@@ -20,7 +20,7 @@ echo.
 
 echo [2/4] Packaging VSIX...
 echo.
-call npx vsce package --allow-missing-repository --ignore doc/
+call npx vsce package --allow-missing-repository
 if errorlevel 1 (
     echo ERROR: Packaging failed!
     exit /b 1

@@ -19,6 +19,7 @@ export class TodoWebviewProvider {
   private currentTextBlocks: TextBlock[] = [];
   private currentFilePath: string = '';
   private resolveCallback: ((task: TodoTask) => void) | undefined;
+  private messageListenerRegistered = false;
 
   // 管理器实例
   private scrollSyncManager!: ScrollSyncManager;
@@ -72,12 +73,15 @@ export class TodoWebviewProvider {
 
     this.panelManager.showPanel(this.currentFilePath, tasks);
 
-    // 设置消息处理
-    this.panelManager.getPanel()?.webview.onDidReceiveMessage(
-      this.handleMessage.bind(this),
-      undefined,
-      this.context.subscriptions
-    );
+    // 只注册一次消息监听器，避免重复触发
+    if (!this.messageListenerRegistered) {
+      this.panelManager.getPanel()?.webview.onDidReceiveMessage(
+        this.handleMessage.bind(this),
+        undefined,
+        this.context.subscriptions
+      );
+      this.messageListenerRegistered = true;
+    }
 
     // 启动定期刷新
     this.fileRefreshManager.startPeriodicRefresh();

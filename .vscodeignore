@@ -25,5 +25,8 @@ Thumbs.db
 *.temp
 nul
 
+# Exclude doc/ directory from package (not needed in production)
+doc/
+
 # Exclude pack.bat from package (not needed in production)
 pack.bat

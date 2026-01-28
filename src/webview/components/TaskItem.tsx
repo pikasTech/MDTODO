@@ -257,6 +257,13 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
           React.createElement('div', { className: 'task-content' },
             React.createElement('div', { className: 'task-id-wrapper' },
               React.createElement('span', { className: 'task-id' }, task.id),
+              React.createElement('div', {
+                className: `task-checkbox ${task.completed ? 'checked' : ''}`,
+                onClick: (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  onToggleComplete(task.id);
+                },
+              }),
               task.processing && React.createElement('span', { className: 'processing-badge' }, '执行中'),
               task.linkCount > 0 && React.createElement('span', {
                 className: `link-status-icon ${task.linkExists === task.linkCount ? 'link-complete' : 'link-partial'}`,
@@ -268,13 +275,6 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
                 ),
                 React.createElement('span', { className: 'link-count' }, `${task.linkExists}/${task.linkCount}`)
               ),
-              React.createElement('div', {
-                className: `task-checkbox ${task.completed ? 'checked' : ''}`,
-                onClick: (e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  onToggleComplete(task.id);
-                },
-              }),
               React.createElement('div', { className: 'task-actions-inline' },
                 isLastChild && React.createElement('button', {
                   className: `action-btn continue-btn ${buttonCooldown[`${BUTTON_IDS.CONTINUE_TASK}_${task.id}`] ? 'disabled' : ''}`,
