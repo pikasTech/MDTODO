@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { platform } from 'os';
+import { logTaskEvent, getSessionTodoFilePath, getLogsDirectoryPath, ensureLogsDirectory } from './logService';
 
 export interface ExecutionResult {
   success: boolean;
@@ -79,6 +80,18 @@ export class ClaudeService {
       // 【R54.3】使用命令生成函数获取参数字符串
       const taskDescription = generateClaudeExecuteArgs(todoFilePath, taskId);
 
+      // 【R54.5.2】【R54.6.6】记录任务执行开始日志（使用统一日志系统）
+      const fullCommand = `claude --dangerously-skip-permissions ${taskDescription}`;
+      if (workspacePath) {
+        const logsDir = getLogsDirectoryPath(workspacePath);
+        await ensureLogsDirectory(logsDir);
+        await logTaskEvent(logsDir, todoFilePath, taskId, 'taskExecute', {
+          command: fullCommand,
+          mode: 'new_terminal',
+          platform: os
+        });
+      }
+
       // 设置 spawn 选项，使用工作区路径作为工作目录
       const spawnOptions: any = {
         detached: true,
@@ -116,10 +129,22 @@ export class ClaudeService {
     // 【R54.3】使用命令生成函数获取参数字符串
     const taskDescription = generateClaudeExecuteArgs(todoFilePath, taskId);
 
-    const terminal = vscode.window.createTerminal('Claude Code');
-    terminal.show();
     // 组合完整的命令
     const command = `claude --dangerously-skip-permissions ${taskDescription}`;
+
+    // 【R54.5.2】【R54.6.6】记录任务执行开始日志（使用统一日志系统）
+    const workspacePath = getWorkspaceFolderPath();
+    if (workspacePath) {
+      const logsDir = getLogsDirectoryPath(workspacePath);
+      await ensureLogsDirectory(logsDir);
+      await logTaskEvent(logsDir, todoFilePath, taskId, 'taskExecute', {
+        command,
+        mode: 'terminal'
+      });
+    }
+
+    const terminal = vscode.window.createTerminal('Claude Code');
+    terminal.show();
     terminal.sendText(command);
   }
 

@@ -11,6 +11,18 @@ import { LinkHandler } from './linkHandler';
 import { FileRefreshManager } from './fileRefreshManager';
 import { TaskStatusManager } from './taskStatusManager';
 import { PanelManager, TaskFileManager, CommandGenerator } from './managers';
+import { getLogsDirectoryPath, ensureLogsDirectory, logTaskEvent, logFileEvent, logPluginLifecycle, initializeSessionLogFilename, resetSessionLogState } from '../services/logService';
+
+// 全局日志目录路径（从 extension.ts 设置）
+let globalLogsDir: string | null = null;
+
+/**
+ * 设置全局日志目录路径（从 extension.ts 调用）
+ */
+export function setGlobalLogsDir(logsDir: string | null): void {
+  globalLogsDir = logsDir;
+  console.log('[MDTODO] Global logs directory set to:', logsDir);
+}
 
 export class TodoWebviewProvider {
   private panel: vscode.WebviewPanel | undefined;
@@ -20,6 +32,7 @@ export class TodoWebviewProvider {
   private currentFilePath: string = '';
   private resolveCallback: ((task: TodoTask) => void) | undefined;
   private messageListenerRegistered = false;
+  private currentPanel: vscode.WebviewPanel | undefined;
 
   // 管理器实例
   private scrollSyncManager!: ScrollSyncManager;
@@ -38,11 +51,30 @@ export class TodoWebviewProvider {
     this.fileRefreshManager = new FileRefreshManager();
     this.taskStatusManager = new TaskStatusManager();
 
-    // 初始化新管理器
+    // 初始化新管理器（带 R54.6.5 日志回调）
     this.panelManager = new PanelManager({
       context,
       getHtmlContent: () => this.getHtmlContent(),
       sendToWebview: (customMessage?: any) => this.sendToWebview(customMessage),
+      // R54.6.5: 记录 panel 关闭事件
+      onPanelDisposed: (filePath: string) => {
+        if (globalLogsDir && filePath) {
+          logPluginLifecycle(globalLogsDir, filePath, 'panelClosed', {
+            timestamp: new Date().toISOString(),
+          });
+        }
+      },
+      // R54.6.5: 记录 panel 创建事件并重新初始化日志
+      onPanelCreated: (filePath: string) => {
+        if (globalLogsDir && filePath) {
+          // R54.6.5: 重新初始化日志文件（新生命周期）
+          resetSessionLogState();
+          initializeSessionLogFilename(filePath);
+          logPluginLifecycle(globalLogsDir, filePath, 'panelOpened', {
+            timestamp: new Date().toISOString(),
+          });
+        }
+      },
     });
 
     this.taskFileManager = new TaskFileManager({
@@ -72,15 +104,20 @@ export class TodoWebviewProvider {
     }
 
     this.panelManager.showPanel(this.currentFilePath, tasks);
+    const panel = this.panelManager.getPanel();
 
-    // 只注册一次消息监听器，避免重复触发
-    if (!this.messageListenerRegistered) {
-      this.panelManager.getPanel()?.webview.onDidReceiveMessage(
+    // 检查是否是新的面板（通过比较面板实例）或当前面板是否有效
+    const isNewPanel = this.currentPanel !== panel;
+
+    // 如果是新面板，需要重新注册消息监听器
+    if (isNewPanel) {
+      panel?.webview.onDidReceiveMessage(
         this.handleMessage.bind(this),
         undefined,
         this.context.subscriptions
       );
       this.messageListenerRegistered = true;
+      this.currentPanel = panel;
     }
 
     // 启动定期刷新
@@ -161,6 +198,22 @@ export class TodoWebviewProvider {
   }
 
   /**
+   * 记录用户交互日志（内部方法）
+   */
+  private async logInteraction(event: string, details: Record<string, unknown> = {}): Promise<void> {
+    if (globalLogsDir && this.currentFilePath) {
+      try {
+        await logTaskEvent(globalLogsDir, this.currentFilePath, 'interaction', event, {
+          source: 'webview',
+          ...details
+        });
+      } catch (error) {
+        console.error('[MDTODO] Failed to log interaction:', error);
+      }
+    }
+  }
+
+  /**
    * 处理来自Webview的消息
    */
   private async handleMessage(message: any): Promise<void> {
@@ -170,17 +223,22 @@ export class TodoWebviewProvider {
       case 'ready':
         console.log('[MDTODO] Webview ready, sending data');
         this.sendToWebview();
+        await this.logInteraction('webviewReady', { taskCount: this.currentTasks.length });
         break;
       case 'taskSelected':
+        await this.logInteraction('taskSelected', { taskId: message.taskId });
         await this.handleTaskSelected(message.taskId);
         break;
       case 'executeTask':
+        await this.logInteraction('taskExecute', { taskId: message.taskId });
         await this.handleExecuteTask(message.taskId);
         break;
       case 'markComplete':
+        await this.logInteraction('taskMarkComplete', { taskId: message.taskId });
         await this.handleMarkComplete(message.taskId);
         break;
       case 'refresh':
+        await this.logInteraction('webviewRefresh', {});
         await this.handleRefresh();
         break;
       case 'openFile':
@@ -190,42 +248,54 @@ export class TodoWebviewProvider {
         await this.handleOpenPreview();
         break;
       case 'openSourceFile':
+        await this.logInteraction('openSourceFile', { filePath: this.currentFilePath });
         await this.handleOpenSourceFile();
         break;
       case 'saveTitle':
+        await this.logInteraction('taskTitleChanged', { taskId: message.taskId, newTitle: message.title });
         await this.handleSaveTitle(message.taskId, message.title);
         break;
       case 'claudeExecute':
+        await this.logInteraction('claudeExecute', { taskId: message.taskId });
         await this.handleClaudeExecute(message.taskId);
         break;
       case 'openLink':
+        await this.logInteraction('openLink', { url: message.url });
         await this.handleOpenLink(message.url);
         break;
       case 'addTask':
+        await this.logInteraction('taskCreated', { type: 'new' });
         await this.handleAddTask();
         break;
       case 'deleteTask':
+        await this.logInteraction('taskDeleted', { taskId: message.taskId });
         await this.handleDeleteTask(message.taskId);
         break;
       case 'addSubTask':
+        await this.logInteraction('taskCreated', { type: 'subtask', parentId: message.taskId });
         await this.handleAddSubTask(message.taskId);
         break;
       case 'continueTask':
+        await this.logInteraction('taskCreated', { type: 'continue', parentId: message.taskId });
         await this.handleContinueTask(message.taskId);
         break;
       case 'webviewScrolled':
+        await this.logInteraction('webviewScrolled', { taskId: message.taskId, lineNumber: message.lineNumber });
         await this.handleWebviewScrolled(message.taskId, message.lineNumber);
         break;
       case 'webviewActive':
         this.setWebviewAsActive();
         break;
       case 'saveTextBlock':
+        await this.logInteraction('textBlockSaved', { blockId: message.blockId });
         await this.handleSaveTextBlock(message.blockId, message.content);
         break;
       case 'deleteLinkFile':
+        await this.logInteraction('linkFileDeleted', { url: message.url });
         await this.handleDeleteLinkFile(message.url);
         break;
       case 'generateExecuteCommand':
+        await this.logInteraction('commandGenerated', { taskId: message.taskId });
         this.handleGenerateExecuteCommand(message.taskId);
         break;
     }
@@ -660,6 +730,9 @@ export class TodoWebviewProvider {
   dispose(): void {
     this.fileRefreshManager.stopPeriodicRefresh();
     this.panelManager.dispose();
+    // R55.8: 重置消息监听器标志，允许下次重新注册
+    this.currentPanel = undefined;
+    this.messageListenerRegistered = false;
   }
 
   /**

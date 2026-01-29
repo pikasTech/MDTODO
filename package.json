@@ -4,6 +4,10 @@
   "description": "VSCODE插件，渲染TODO文件为独立视图窗口，支持Claude Code集成",
   "version": "0.0.2",
   "publisher": "mdtodo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mdtodo/vscode-mdtodo"
+  },
   "engines": {
     "vscode": "^1.70.0"
   },

@@ -7,6 +7,9 @@ export interface PanelManagerOptions {
   context: vscode.ExtensionContext;
   getHtmlContent: () => string;
   sendToWebview: (customMessage?: any) => void;
+  // R54.6.5: 日志回调
+  onPanelDisposed?: (filePath: string) => void;
+  onPanelCreated?: (filePath: string) => void;
 }
 
 export class PanelManager {
@@ -14,11 +17,16 @@ export class PanelManager {
   private context: vscode.ExtensionContext;
   private getHtmlContent: () => string;
   private sendToWebview: (customMessage?: any) => void;
+  private onPanelDisposed: ((filePath: string) => void) | undefined;
+  private onPanelCreated: ((filePath: string) => void) | undefined;
+  private currentFilePath: string = '';
 
   constructor(options: PanelManagerOptions) {
     this.context = options.context;
     this.getHtmlContent = options.getHtmlContent;
     this.sendToWebview = options.sendToWebview;
+    this.onPanelDisposed = options.onPanelDisposed;
+    this.onPanelCreated = options.onPanelCreated;
   }
 
   /**
@@ -39,12 +47,18 @@ export class PanelManager {
     }
 
     const panelTitle = this.getFileNameFromPath(filePath || '');
+    this.currentFilePath = filePath || '';
 
     if (this.panel) {
       this.panel.title = panelTitle;
       this.panel.reveal(vscode.ViewColumn.Beside);
       this.sendToWebview();
     } else {
+      // R54.6.5: 记录 panel 创建事件（新生命周期）
+      if (this.onPanelCreated) {
+        this.onPanelCreated(this.currentFilePath);
+      }
+
       const activeEditor = vscode.window.activeTextEditor;
       const viewColumn = activeEditor ? vscode.ViewColumn.Beside : vscode.ViewColumn.Two;
 
@@ -65,6 +79,10 @@ export class PanelManager {
 
       this.panel.onDidDispose(
         () => {
+          // R54.6.5: 记录 panel 关闭事件
+          if (this.onPanelDisposed) {
+            this.onPanelDisposed(this.currentFilePath);
+          }
           this.panel = undefined;
         },
         undefined,
