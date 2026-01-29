@@ -1,78 +1,69 @@
 @echo off
-chcp 65001 >nul
+chcp 437 >nul
 echo ============================================
-echo VSCode MDTODO Plugin Install Script
+echo   MDTODO VSCode Extension Install Script
 echo ============================================
 echo.
 
 cd /d "%~dp0"
-setlocal
 
-echo [1/4] Building project...
-echo.
+echo [1/5] Installing dependencies...
+call npm install
+if errorlevel 1 (
+    echo ERROR: npm install failed!
+    exit /b 1
+)
+echo Done.
+
+echo [2/5] Building project...
 call npm.cmd run compile
 if errorlevel 1 (
     echo ERROR: Build failed!
     exit /b 1
 )
-echo Build completed.
-echo.
+echo Done.
 
-echo [2/4] Packaging VSIX...
-echo.
+echo [3/5] Packaging VSIX...
 call npx vsce package --allow-missing-repository
 if errorlevel 1 (
     echo ERROR: Packaging failed!
     exit /b 1
 )
-echo Packaging completed.
-echo.
+echo Done.
 
-set VSIX_FILE=vscode-mdtodo-0.0.2.vsix
-
+set "VSIX_FILE=vscode-mdtodo-0.0.2.vsix"
 if not exist "%VSIX_FILE%" (
-    echo ERROR: %VSIX_FILE% not found after packaging!
+    echo ERROR: %VSIX_FILE% not found!
     exit /b 1
 )
 echo VSIX file generated: %VSIX_FILE%
 echo.
 
-echo [3/4] Uninstalling old version (if exists)...
+echo [4/5] Uninstalling old version (if exists)...
 echo.
-call code --uninstall-extension mdtodo.vscode-mdtodo --force 2>nul || echo No previous version to uninstall.
+call code --uninstall-extension mdtodo.vscode-mdtodo --force || echo No previous version to uninstall.
 echo.
+echo Done.
 
-echo [4/4] Installing extension...
-echo.
+echo [5/5] Installing new version...
 call code --install-extension "%VSIX_FILE%" --force
-if errorlevel 1 (
-    echo ERROR: Installation failed!
-    echo Please make sure VSCode is installed and 'code' command is available.
-    echo You can add VSCode to PATH by:
+
+if not errorlevel 0 (
+    echo WARNING: Could not auto-install to VSCode.
+    echo Please install manually:
     echo   1. Open VSCode
-    echo   2. Press Ctrl+Shift+P
-    echo   3. Type "Shell Command: Install 'code' command in PATH"
-    exit /b 1
+    echo   2. Press Ctrl+Shift+X
+    echo   3. Click "..." menu
+    echo   4. Select "Install from VSIX"
+    echo   5. Select: %VSIX_FILE%
+    echo.
+    set "MANUAL=1"
 )
-echo Installation completed.
-echo.
 
+echo.
 echo ============================================
-echo Install Complete!
+echo   Build Complete!
 echo ============================================
 echo.
-echo The MDTODO plugin has been built and installed successfully!
+echo VSIX file: %VSIX_FILE%
 echo.
-echo To verify the installation:
-echo   1. Open VSCode
-echo   2. Press Ctrl+Shift+X to open Extensions panel
-echo   3. Search for "MDTODO" to confirm it's installed
-echo.
-echo To use the plugin:
-echo   1. Open a .md file
-echo   2. Press Ctrl+Shift+P
-echo   3. Type "MDTODO: Open" to launch the plugin
-echo.
-
-endlocal
-

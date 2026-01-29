@@ -526,20 +526,26 @@ export class TodoWebviewProvider {
    * 处理标记完成
    */
   private async handleMarkComplete(taskId: string): Promise<void> {
+    console.log(`[R55.6] handleMarkComplete 开始: taskId=${taskId}, currentFilePath=${this.currentFilePath}`);
     if (!this.currentFilePath) {
+      console.log(`[R55.6] handleMarkComplete 失败: currentFilePath 为空`);
       vscode.window.showWarningMessage('请先打开一个TODO文件');
       return;
     }
 
     const task = this.taskFileManager.findTask(this.currentTasks, taskId);
     if (!task) {
+      console.log(`[R55.6] handleMarkComplete 失败: 未找到任务 ${taskId}`);
       vscode.window.showWarningMessage(`未找到任务 ${taskId}`);
       return;
     }
 
     const isComplete = !task.completed;
+    console.log(`[R55.6] handleMarkComplete: 调用 markTaskAsFinished, isComplete=${isComplete}`);
     await this.taskStatusManager.markTaskAsFinished(taskId, isComplete);
+    console.log(`[R55.6] handleMarkComplete: markTaskAsFinished 完成，调用 loadFile`);
     await this.loadFile(this.currentFilePath);
+    console.log(`[R55.6] handleMarkComplete: loadFile 完成`);
 
     vscode.window.showInformationMessage(`任务 ${taskId} 已${isComplete ? '标记完成' : '取消完成'}`);
   }

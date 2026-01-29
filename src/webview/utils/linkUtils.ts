@@ -31,6 +31,15 @@ export const copyLinkPath = async (
   // 将反斜杠替换为斜杠，保持路径格式一致性
   absolutePath = absolutePath.replace(/\\/g, '/');
 
+  // 规范化路径：移除开头的 ./ 模式
+  absolutePath = absolutePath.replace(/^\.\//, '');
+  // 移除路径中间的 /./ 模式
+  absolutePath = absolutePath.replace(/\/\.\//g, '/');
+  // 处理路径末尾的 ./
+  absolutePath = absolutePath.replace(/\/\.$/, '');
+  // 处理连续的 ./ 情况
+  absolutePath = absolutePath.replace(/(\/)\./g, '$1');
+
   try {
     await navigator.clipboard.writeText(absolutePath);
     console.log('链接绝对路径已复制到剪贴板:', absolutePath);
@@ -83,6 +92,15 @@ export const copyLinkRelativePath = async (
 
   // 将反斜杠替换为斜杠，保持路径格式一致性
   relativePath = relativePath.replace(/\\/g, '/');
+
+  // 规范化路径：移除开头的 ./ 模式
+  relativePath = relativePath.replace(/^\.\//, '');
+  // 移除路径中间的 /./ 模式
+  relativePath = relativePath.replace(/\/\.\//g, '/');
+  // 处理路径末尾的 ./
+  relativePath = relativePath.replace(/\/\.$/, '');
+  // 处理连续的 ./ 情况
+  relativePath = relativePath.replace(/(\/)\./g, '$1');
 
   try {
     await navigator.clipboard.writeText(relativePath);
