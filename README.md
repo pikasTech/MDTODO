@@ -2,6 +2,8 @@
 
 VSCODE插件，渲染TODO文件为树形任务列表，支持Claude Code集成。
 
+![alt text](image.png)
+
 ## 功能特性
 
 - **树形任务列表**：将Markdown格式的TODO文件渲染为可展开/折叠的树形结构
