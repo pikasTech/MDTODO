@@ -2,6 +2,10 @@
 
 VSCODE插件，渲染TODO文件为树形任务列表，支持Claude Code集成。
 
+> **自举说明**：本项目完全通过以下 TODO 文件自举完成开发，所有开发任务、进度记录、技术调研均在这些文件中：
+> - [`docs/20260120_MDTODO2.md`](./docs/20260120_MDTODO2.md)
+> - [`docs/20260120_MDTODO.md`](./docs/20260120_MDTODO.md)
+
 ![alt text](image.png)
 
 ## 功能特性
