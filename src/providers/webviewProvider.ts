@@ -11,7 +11,7 @@ import { LinkHandler } from './linkHandler';
 import { FileRefreshManager } from './fileRefreshManager';
 import { TaskStatusManager } from './taskStatusManager';
 import { PanelManager, TaskFileManager, CommandGenerator } from './managers';
-import { getLogsDirectoryPath, ensureLogsDirectory, logTaskEvent, logFileEvent, logPluginLifecycle, initializeSessionLogFilename, resetSessionLogState } from '../services/logService';
+import { getLogsDirectoryPath, ensureLogsDirectory, logTaskEvent, logFileEvent, logPluginLifecycle, initializeSessionLogFilename, resetSessionLogState, writeUnifiedLogEntry } from '../services/logService';
 
 // 全局日志目录路径（从 extension.ts 设置）
 let globalLogsDir: string | null = null;
@@ -298,6 +298,10 @@ export class TodoWebviewProvider {
         await this.logInteraction('commandGenerated', { taskId: message.taskId });
         this.handleGenerateExecuteCommand(message.taskId);
         break;
+      // R54.8.1: 处理来自 webview 的 console 日志
+      case 'webviewLog':
+        await this.handleWebviewLog(message);
+        break;
     }
   }
 
@@ -417,6 +421,29 @@ export class TodoWebviewProvider {
         taskId: result.taskId
       });
       console.log('[MDTODO] 已生成并发送执行命令:', result.command);
+    }
+  }
+
+  // R54.8.1: 处理来自 webview 的 console 日志
+  private async handleWebviewLog(message: any): Promise<void> {
+    const { level, message: logMessage, timestamp, args } = message;
+
+    if (globalLogsDir && this.currentFilePath) {
+      try {
+        await writeUnifiedLogEntry(globalLogsDir, this.currentFilePath, {
+          eventType: level === 'error' ? 'error' : 'lifecycle',
+          event: 'webviewLog',
+          details: {
+            source: 'webview',
+            level,
+            message: logMessage,
+            timestamp,
+            rawArgs: args
+          }
+        });
+      } catch (error) {
+        console.error('[MDTODO] Failed to write webview log:', error);
+      }
     }
   }
 

@@ -80,6 +80,68 @@ window.MDTODO.refreshTaskTitle = (taskId: string, newTitle: string) => {
 // 刷新单个任务的状态更新函数（将在 TaskList 中注册）
 window.MDTODO.updateTaskState = null;
 
+// ============================================
+// R54.8.1: 覆盖 console 方法，将日志发送到扩展端
+// ============================================
+
+const originalConsoleLog = console.log;
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+
+/**
+ * 发送日志到扩展端
+ */
+const sendLogToExtension = (level: string, args: any[]) => {
+  if (vscodeApi) {
+    const timestamp = new Date().toISOString();
+    const message = args.map(arg => {
+      if (typeof arg === 'object') {
+        try {
+          return JSON.stringify(arg);
+        } catch {
+          return String(arg);
+        }
+      }
+      return String(arg);
+    }).join(' ');
+
+    vscodeApi.postMessage({
+      type: 'webviewLog',
+      level,
+      message,
+      timestamp,
+      args: args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch {
+            return String(arg);
+          }
+        }
+        return arg;
+      })
+    });
+  }
+};
+
+// 覆盖 console.log
+console.log = (...args: any[]) => {
+  sendLogToExtension('info', args);
+  originalConsoleLog.apply(console, args);
+};
+
+// 覆盖 console.warn
+console.warn = (...args: any[]) => {
+  sendLogToExtension('warning', args);
+  originalConsoleWarn.apply(console, args);
+};
+
+// 覆盖 console.error
+console.error = (...args: any[]) => {
+  sendLogToExtension('error', args);
+  originalConsoleError.apply(console, args);
+};
+
 // 启动应用函数
 const init = () => {
   const container = document.getElementById('root');

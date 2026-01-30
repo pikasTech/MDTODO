@@ -2,6 +2,20 @@ import * as React from 'react';
 import { marked } from 'marked';
 import { Task, BUTTON_IDS } from './types';
 
+// Maximum depth level for indentation (0 = level 1, 1 = level 2, max 2 levels total)
+const MAX_DEPTH = 1;
+
+/**
+ * Calculate the depth level from a task ID.
+ * R1 -> depth 0 (level 1, 0 dots)
+ * R1.1 -> depth 1 (level 2, 1 dot)
+ * R1.1.1 -> depth 1 (capped at max, 2 dots but max depth is 1)
+ */
+const calculateTaskDepth = (taskId: string): number => {
+  const dotCount = (taskId.match(/\./g) || []).length;
+  return Math.min(dotCount, MAX_DEPTH);
+};
+
 export interface TaskItemProps {
   task: Task;
   depth: number;
@@ -23,6 +37,7 @@ export interface TaskItemProps {
   onAddSubTask: (taskId: string) => void;
   onContinueTask: (taskId: string) => void;
   isLastChild: boolean;
+  allTasks?: Task[];
   onDoubleClick: (taskId: string) => void;
   onSaveComplete?: (taskId: string) => void;
   onTaskContentClick?: (e: React.MouseEvent, taskId: string) => void;
@@ -51,11 +66,67 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
     onAddSubTask,
     onContinueTask,
     isLastChild,
+    allTasks,
     onDoubleClick,
     onSaveComplete,
     onTaskContentClick,
     onTaskContentContextMenu,
   } = props;
+
+  // Helper function to get prefix of task ID
+  const getTaskPrefix = (taskId: string): string => {
+    const lastDotIndex = taskId.lastIndexOf('.');
+    return lastDotIndex > 0 ? taskId.substring(0, lastDotIndex) : '';
+  };
+
+  // Check if a task is the last task in its level
+  const isLastTaskInLevel = (taskId: string): boolean => {
+    // Fallback to old behavior if allTasks is not provided
+    if (!allTasks || allTasks.length === 0) {
+      return false;
+    }
+
+    const prefix = getTaskPrefix(taskId);
+
+    // Collect all task IDs in order from the entire task tree
+    const collectAllTaskIds = (tasks: Task[]): string[] => {
+      const result: string[] = [];
+      const traverse = (taskList: Task[]) => {
+        for (const t of taskList) {
+          result.push(t.id);
+          if (t.children && t.children.length > 0) {
+            traverse(t.children);
+          }
+        }
+      };
+      traverse(tasks);
+      return result;
+    };
+
+    const allTaskIds = collectAllTaskIds(allTasks);
+
+    if (!prefix) {
+      // Root level task
+      const rootTasks = allTasks;
+      return rootTasks.length > 0 && rootTasks[rootTasks.length - 1].id === taskId;
+    } else {
+      // Subtask
+      const taskIndex = allTaskIds.indexOf(taskId);
+      if (taskIndex === -1 || taskIndex === allTaskIds.length - 1) {
+        return taskIndex !== -1;
+      }
+      for (let i = taskIndex + 1; i < allTaskIds.length; i++) {
+        if (getTaskPrefix(allTaskIds[i]) === prefix) {
+          return false;
+        }
+        const currentPrefix = getTaskPrefix(allTaskIds[i]);
+        if (!currentPrefix.startsWith(prefix) && !prefix.startsWith(currentPrefix)) {
+          break;
+        }
+      }
+      return true;
+    }
+  };
 
   const titleInputRef = React.useRef<HTMLTextAreaElement>(null);
   const [editValue, setEditValue] = React.useState(task.rawContent || task.title);
@@ -174,7 +245,7 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
 
   const childrenStyle = {
     maxHeight: isExpanded ? '10000px' : `${PREVIEW_MAX_HEIGHT}px`,
-    marginLeft: `${24 + depth * 16}px`,
+    marginLeft: `${24 + calculateTaskDepth(task.id) * 16}px`,
     overflowY: isExpanded ? 'hidden' : 'auto',
     scrollBehavior: isExpanded ? undefined : 'smooth',
   };
@@ -377,7 +448,7 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
         React.createElement(TaskItem, {
           key: child.id,
           task: child,
-          depth: depth + 1,
+          depth: calculateTaskDepth(child.id),
           expandedTasks,
           editModes,
           buttonCooldown,
@@ -394,7 +465,8 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
           onDelete,
           onAddSubTask,
           onContinueTask,
-          isLastChild: index === childrenLength - 1,
+          isLastChild: isLastTaskInLevel(child.id),
+          allTasks,
           claudeExecuting,
           onDoubleClick,
           onSaveComplete,

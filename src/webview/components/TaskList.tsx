@@ -17,6 +17,88 @@ import {
 // Declare globals for TypeScript
 declare const window: any;
 
+// Maximum depth level for indentation (0 = level 1, 1 = level 2, max 2 levels total)
+const MAX_DEPTH = 1;
+
+/**
+ * Calculate the depth level from a task ID.
+ * R1 -> depth 0 (level 1, 0 dots)
+ * R1.1 -> depth 1 (level 2, 1 dot)
+ * R1.1.1 -> depth 1 (capped at max, 2 dots but max depth is 1)
+ */
+const calculateTaskDepth = (taskId: string): number => {
+  const dotCount = (taskId.match(/\./g) || []).length;
+  return Math.min(dotCount, MAX_DEPTH);
+};
+
+/**
+ * Get the prefix of a task ID for level comparison.
+ * R1.3.1 -> prefix "R1.3"
+ * R1.3 -> prefix "R1"
+ * R1 -> prefix "" (root level)
+ */
+const getTaskPrefix = (taskId: string): string => {
+  const lastDotIndex = taskId.lastIndexOf('.');
+  return lastDotIndex > 0 ? taskId.substring(0, lastDotIndex) : '';
+};
+
+/**
+ * Check if a task is the last task in its level.
+ * A task is last in its level if:
+ * 1. For root tasks (no prefix): it's the last task in the root array
+ * 2. For subtasks: no task with the same prefix comes after it in the entire task tree
+ */
+const isLastTaskInLevel = (taskId: string, allTasks: Task[]): boolean => {
+  if (!allTasks || allTasks.length === 0) {
+    return false;
+  }
+
+  const prefix = getTaskPrefix(taskId);
+
+  // Collect all task IDs in order from the entire task tree
+  const collectAllTaskIds = (tasks: Task[]): string[] => {
+    const result: string[] = [];
+    const traverse = (list: Task[]) => {
+      for (const task of list) {
+        result.push(task.id);
+        if (task.children && task.children.length > 0) {
+          traverse(task.children);
+        }
+      }
+    };
+    traverse(tasks);
+    return result;
+  };
+
+  const allTaskIds = collectAllTaskIds(allTasks);
+
+  if (!prefix) {
+    // Root level task: check if it's the last in the root array
+    const rootTasks = allTasks;
+    return rootTasks.length > 0 && rootTasks[rootTasks.length - 1].id === taskId;
+  } else {
+    // Subtask: check if any task with the same prefix comes after it
+    const taskIndex = allTaskIds.indexOf(taskId);
+    if (taskIndex === -1 || taskIndex === allTaskIds.length - 1) {
+      return taskIndex !== -1; // If it's the only task or last task overall, it's last in level
+    }
+    // Check if any subsequent task has the same prefix
+    for (let i = taskIndex + 1; i < allTaskIds.length; i++) {
+      if (getTaskPrefix(allTaskIds[i]) === prefix) {
+        return false; // Found a task with same prefix after this one
+      }
+      // If we encounter a task with a different shorter prefix, stop checking
+      // because tasks are ordered hierarchically
+      const currentPrefix = getTaskPrefix(allTaskIds[i]);
+      if (!currentPrefix.startsWith(prefix) && !prefix.startsWith(currentPrefix)) {
+        // Different branch, no more tasks with same prefix will appear
+        break;
+      }
+    }
+    return true;
+  }
+};
+
 const TaskList: React.FC<TaskListProps> = (props) => {
   const { initialTasks = [], initialTextBlocks = [], filePath = '', vscodeApi, onSaveComplete } = props;
 
@@ -366,7 +448,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
             React.createElement(TaskItem, {
               key: task.id,
               task,
-              depth: 0,
+              depth: calculateTaskDepth(task.id),
               expandedTasks,
               editModes,
               buttonCooldown,
@@ -381,7 +463,8 @@ const TaskList: React.FC<TaskListProps> = (props) => {
               onDelete: operations.handleDeleteTask,
               onAddSubTask: operations.handleAddSubTask,
               onContinueTask: operations.handleContinueTask,
-              isLastChild: false,
+              isLastChild: isLastTaskInLevel(task.id, tasks),
+              allTasks: tasks,
               claudeExecuting,
               isCollapseAllTriggered,
               onDoubleClick: operations.handleDoubleClick,

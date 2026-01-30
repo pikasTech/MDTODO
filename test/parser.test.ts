@@ -130,4 +130,68 @@ describe('Parser Tests', () => {
     expect(tasks[2].completed).toBe(true);
     expect(tasks[2].title).toContain('根据R2的规划');
   });
+
+  // R53.10: 验证 [xxx] 格式在渲染时被忽略
+  test('R53.10: Should ignore [pending] in title', () => {
+    const content = `## R1 [pending] 等待处理的任务`;
+
+    const parser = new TodoParser();
+    const tasks = parser.parse(content, '/test/TODO.md');
+
+    // [pending] 应该被移除，不显示在标题中
+    expect(tasks[0].title).toBe('等待处理的任务');
+    expect(tasks[0].title).not.toContain('[pending]');
+  });
+
+  test('R53.10: Should ignore any [xxx] format in title', () => {
+    const content = `## R1 [custom_tag] 自定义标签任务`;
+
+    const parser = new TodoParser();
+    const tasks = parser.parse(content, '/test/TODO.md');
+
+    // [custom_tag] 应该被移除
+    expect(tasks[0].title).toBe('自定义标签任务');
+    expect(tasks[0].title).not.toContain('[custom_tag]');
+  });
+
+  test('R53.10: Should ignore multiple [xxx] formats in title', () => {
+    const content = `## R1 [tag1] [tag2] [tag3] 多标签任务`;
+
+    const parser = new TodoParser();
+    const tasks = parser.parse(content, '/test/TODO.md');
+
+    // 所有 [xxx] 格式都应该被移除
+    expect(tasks[0].title).toBe('多标签任务');
+    expect(tasks[0].title).not.toContain('[');
+  });
+
+  test('R53.10: Should preserve markdown links while ignoring [xxx]', () => {
+    const content = `## R1 [pending] 任务内容 报告写入 [R1](./details/test.md)`;
+
+    const parser = new TodoParser();
+    const tasks = parser.parse(content, '/test/TODO.md');
+
+    // [pending] 应该被移除，但链接应该保留
+    expect(tasks[0].title).toBe('任务内容 报告写入 [R1](./details/test.md)');
+    expect(tasks[0].title).not.toContain('[pending]');
+    // 验证链接被保留
+    expect(tasks[0].title).toContain('[R1](./details/test.md)');
+  });
+
+  test('R53.10: Should handle [in_progress] and [completed] correctly', () => {
+    const content = `## R1 [in_progress] 执行中任务
+## R2 [completed] 已完成任务`;
+
+    const parser = new TodoParser();
+    const tasks = parser.parse(content, '/test/TODO.md');
+
+    // 状态标记应该被移除，同时正确检测状态
+    expect(tasks[0].title).toBe('执行中任务');
+    expect(tasks[0].processing).toBe(true);
+    expect(tasks[0].title).not.toContain('[in_progress]');
+
+    expect(tasks[1].title).toBe('已完成任务');
+    expect(tasks[1].completed).toBe(true);
+    expect(tasks[1].title).not.toContain('[completed]');
+  });
 });

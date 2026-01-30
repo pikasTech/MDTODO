@@ -251,13 +251,24 @@ export class TodoParser {
     // 判断是否执行中（只支持 [in_progress]）
     const processing = taskLine.includes('[in_progress]');
 
-    // 提取标题：移除ID和标记，保留其他markdown格式
-    let title = content
-      .replace(/\[completed\]/g, '')  // 移除 [completed]
-      .replace(/\[in_progress\]/g, '')  // 移除 [in_progress]
+    // 提取标题：移除所有 [xxx] 格式的标记和ID，保留其他markdown格式
+    // 先提取并保护链接 [...](...)，然后移除 [xxx]，最后还原链接
+    const links: string[] = [];
+    let tempContent = content.replace(/\[([^\]]*)\]\([^)]*\)/g, (match) => {
+      links.push(match);
+      return `__LINK_${links.length - 1}__`;
+    });
+
+    let title = tempContent
+      .replace(/\[.*?\]/g, '')  // 移除所有 [xxx] 格式
       .replace(/(R\d+(?:\.\d+)*)/, '')  // 移除任务ID
       .replace(/^##?\s*/, '')  // 移除开头的 ##
       .trim();
+
+    // 还原链接
+    links.forEach((link, index) => {
+      title = title.replace(`__LINK_${index}__`, link);
+    });
 
     // 【修复R24】如果标题为空，保持为空字符串而不是使用ID
     // 新添加的任务没有内容，编辑框应该为空而不是显示编号
