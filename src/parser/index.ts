@@ -84,11 +84,32 @@ export class TodoParser {
     return count;
   }
 
+  /**
+   * 根据任务ID计算深度（用于构建树结构）
+   * R1 -> 深度0（顶级）
+   * R1.1 -> 父ID是R1
+   * R1.1.1 -> 父ID是R1.1
+   */
+  private getTaskDepth(taskId: string): number {
+    return (taskId.match(/\./g) || []).length;
+  }
+
+  /**
+   * 获取任务的父任务ID
+   * R1 -> 无父任务（返回空字符串）
+   * R1.1 -> 父ID是R1
+   * R1.1.1 -> 父ID是R1.1
+   */
+  private getParentId(taskId: string): string {
+    const lastDotIndex = taskId.lastIndexOf('.');
+    return lastDotIndex === -1 ? '' : taskId.substring(0, lastDotIndex);
+  }
+
   parse(content: string, filePath: string): TodoTask[] {
     const lines = content.split('\n');
     const tokens = this.tokenizer(content);
     const rootTasks: TodoTask[] = [];
-    const stack: { task: TodoTask; level: number }[] = [];
+    const stack: { task: TodoTask; id: string; depth: number }[] = [];
 
     for (const token of tokens) {
       if (token.type === 'task') {
@@ -97,17 +118,32 @@ export class TodoParser {
         const { fullContent, rawContent } = this.getFullTaskContent(lines, token.lineNumber, tokens);
         const task = this.parseTask(fullContent, rawContent, filePath, token.level, token.lineNumber);
 
-        while (stack.length > 0 && stack[stack.length - 1].level >= token.level) {
+        // 【R53.9.3修复】根据任务ID判断父子关系，而不是根据 ## 数量
+        const parentId = this.getParentId(task.id);
+        const taskDepth = this.getTaskDepth(task.id);
+
+        // 弹出栈中所有深度 >= 当前任务深度的元素
+        // 这样可以找到正确的父任务
+        while (stack.length > 0 && stack[stack.length - 1].depth >= taskDepth) {
           stack.pop();
         }
 
+        // 现在栈顶就是父任务（如果栈非空）
         if (stack.length > 0) {
-          stack[stack.length - 1].task.children.push(task);
+          // 验证栈顶确实是父任务
+          const top = stack[stack.length - 1];
+          if (task.id.startsWith(top.id + '.')) {
+            stack[stack.length - 1].task.children.push(task);
+          } else {
+            // 理论上不应该发生，但为了安全
+            rootTasks.push(task);
+          }
         } else {
           rootTasks.push(task);
         }
 
-        stack.push({ task, level: token.level });
+        // 将当前任务推入栈中
+        stack.push({ task, id: task.id, depth: taskDepth });
       }
     }
 

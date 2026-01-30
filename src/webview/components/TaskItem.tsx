@@ -245,7 +245,7 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
 
   const childrenStyle = {
     maxHeight: isExpanded ? '10000px' : `${PREVIEW_MAX_HEIGHT}px`,
-    marginLeft: `${24 + calculateTaskDepth(task.id) * 16}px`,
+    marginLeft: '0px',
     overflowY: isExpanded ? 'hidden' : 'auto',
     scrollBehavior: isExpanded ? undefined : 'smooth',
   };

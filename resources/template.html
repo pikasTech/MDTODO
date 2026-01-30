@@ -25,15 +25,16 @@
   <!-- Bundled React app (includes CSS via style-loader) -->
   <script src="{{BUNDLE_JS_URI}}"></script>
 
-  <!-- Fallback: Remove loading message -->
+  <!-- Fallback: Remove loading message (longer timeout for dev mode) -->
   <script>
     setTimeout(() => {
       const loading = document.getElementById('loading');
       if (loading) {
-        console.log('[Webview HTML] React loading timeout');
+        // Webpack watch mode can be slow, this is expected in dev mode
+        console.log('[Webview] Loading React (dev mode - bundle may still loading)');
         loading.innerHTML = '加载中...';
       }
-    }, 3000);
+    }, 5000);
   </script>
 </body>
 </html>

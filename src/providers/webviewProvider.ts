@@ -298,8 +298,9 @@ export class TodoWebviewProvider {
         await this.logInteraction('commandGenerated', { taskId: message.taskId });
         this.handleGenerateExecuteCommand(message.taskId);
         break;
-      // R54.8.1: 处理来自 webview 的 console 日志
+      // R54.8.1/R54.8.3: 处理来自 webview 的 console 日志和 MDTODO.log API
       case 'webviewLog':
+      case 'mdtodoLog':
         await this.handleWebviewLog(message);
         break;
     }
@@ -424,9 +425,9 @@ export class TodoWebviewProvider {
     }
   }
 
-  // R54.8.1: 处理来自 webview 的 console 日志
+  // R54.8.1/R54.8.3: 处理来自 webview 的 console 日志和 MDTODO.log API
   private async handleWebviewLog(message: any): Promise<void> {
-    const { level, message: logMessage, timestamp, args } = message;
+    const { level, message: logMessage, timestamp, args, source } = message;
 
     if (globalLogsDir && this.currentFilePath) {
       try {
@@ -434,7 +435,7 @@ export class TodoWebviewProvider {
           eventType: level === 'error' ? 'error' : 'lifecycle',
           event: 'webviewLog',
           details: {
-            source: 'webview',
+            source: source || 'webview',
             level,
             message: logMessage,
             timestamp,

@@ -81,17 +81,14 @@ window.MDTODO.refreshTaskTitle = (taskId: string, newTitle: string) => {
 window.MDTODO.updateTaskState = null;
 
 // ============================================
-// R54.8.1: 覆盖 console 方法，将日志发送到扩展端
+// R54.8.3: 日志系统 (window.MDTODO.log/warn/error)
+// 必须先定义，再注册事件监听器
 // ============================================
-
-const originalConsoleLog = console.log;
-const originalConsoleWarn = console.warn;
-const originalConsoleError = console.error;
 
 /**
  * 发送日志到扩展端
  */
-const sendLogToExtension = (level: string, args: any[]) => {
+const sendLogToExtension = (level: string, args: any[], source: string = 'webview') => {
   if (vscodeApi) {
     const timestamp = new Date().toISOString();
     const message = args.map(arg => {
@@ -106,10 +103,11 @@ const sendLogToExtension = (level: string, args: any[]) => {
     }).join(' ');
 
     vscodeApi.postMessage({
-      type: 'webviewLog',
+      type: 'mdtodoLog',
       level,
       message,
       timestamp,
+      source,
       args: args.map(arg => {
         if (typeof arg === 'object') {
           try {
@@ -124,51 +122,186 @@ const sendLogToExtension = (level: string, args: any[]) => {
   }
 };
 
-// 覆盖 console.log
-console.log = (...args: any[]) => {
-  sendLogToExtension('info', args);
-  originalConsoleLog.apply(console, args);
-};
-
-// 覆盖 console.warn
-console.warn = (...args: any[]) => {
-  sendLogToExtension('warning', args);
-  originalConsoleWarn.apply(console, args);
-};
-
-// 覆盖 console.error
-console.error = (...args: any[]) => {
-  sendLogToExtension('error', args);
-  originalConsoleError.apply(console, args);
-};
-
-// 启动应用函数
-const init = () => {
-  const container = document.getElementById('root');
-  if (container && !hasSentReady) {
-    const root = createRoot(container);
-
-    // 创建 TaskList 组件，传入 vscodeApi 和保存完成回调
-    root.render(
-      React.createElement(React.StrictMode, null,
-        React.createElement(TaskList, {
-          vscodeApi,
-          onSaveComplete: handleSaveComplete
-        })
-      )
-    );
-
-    // 通知 extension webview 已准备好
-    setTimeout(() => {
-      if (vscodeApi && !hasSentReady) {
-        console.log('[Webview] Sending ready message');
-        hasSentReady = true;
-        vscodeApi.postMessage({ type: 'ready' });
-      } else if (!vscodeApi) {
-        console.error('[Webview] Cannot send ready: vscodeApi is null');
-      }
-    }, 100);
+// 创建 window.MDTODO.log API
+window.MDTODO.log = (...args: any[]) => {
+  try {
+    sendLogToExtension('info', args, 'MDTODO.log');
+  } catch (error) {
+    // 确保日志 API 本身不会抛出异常
+    console.error('[MDTODO] Log API error:', error);
   }
 };
 
-init();
+// 创建 window.MDTODO.warn API
+window.MDTODO.warn = (...args: any[]) => {
+  try {
+    sendLogToExtension('warning', args, 'MDTODO.warn');
+  } catch (error) {
+    console.error('[MDTODO] Warn API error:', error);
+  }
+};
+
+// 创建 window.MDTODO.error API
+window.MDTODO.error = (...args: any[]) => {
+  try {
+    sendLogToExtension('error', args, 'MDTODO.error');
+  } catch (error) {
+    console.error('[MDTODO] Error API error:', error);
+  }
+};
+
+// ============================================
+// R54.8.3: 全局错误处理器 (window.MDTODO.errorHandler)
+// ============================================
+
+/**
+ * 全局错误处理器 - 捕获并记录未处理的异常
+ */
+window.MDTODO.errorHandler = {
+  /**
+   * 记录错误到扩展端
+   */
+  logError: (error: Error | string, context?: string) => {
+    try {
+      const errorMessage = typeof error === 'string' ? error : error.message;
+      const errorStack = typeof error === 'string' ? '' : error.stack || '';
+
+      if (vscodeApi) {
+        vscodeApi.postMessage({
+          type: 'mdtodoLog',
+          level: 'error',
+          message: `[Error Context: ${context || 'N/A'}] Message: ${errorMessage} Stack: ${errorStack}`,
+          timestamp: new Date().toISOString(),
+          source: 'MDTODO.errorHandler',
+          args: [`[Error Context: ${context || 'N/A'}]`, `Message: ${errorMessage}`, `Stack: ${errorStack}`]
+        });
+      }
+    } catch (e) {
+      console.error('[MDTODO] Error in errorHandler.logError:', e);
+    }
+  },
+
+  /**
+   * 包装函数以捕获并记录错误
+   */
+  wrap: (fn: Function, context?: string): Function => {
+    return function(...args: any[]) {
+      try {
+        return fn.apply(this, args);
+      } catch (error) {
+        window.MDTODO.errorHandler.logError(error as Error, context);
+        throw error;
+      }
+    };
+  },
+
+  /**
+   * 包装 Promise 以捕获 rejection
+   */
+  wrapPromise: (promise: Promise<any>, context?: string): Promise<any> => {
+    return promise.catch(error => {
+      window.MDTODO.errorHandler.logError(error as Error, context);
+      return Promise.reject(error);
+    });
+  }
+};
+
+// ============================================
+// R54.8.3: 捕获 unhandledrejection 事件
+// ============================================
+
+/**
+ * 捕获未处理的 Promise rejection
+ */
+window.addEventListener('unhandledrejection', (event) => {
+  try {
+    const reason = event.reason;
+    const errorMessage = reason instanceof Error ? reason.message : String(reason);
+    const errorStack = reason instanceof Error ? reason.stack || '' : '';
+
+    if (vscodeApi) {
+      vscodeApi.postMessage({
+        type: 'mdtodoLog',
+        level: 'error',
+        message: `[Unhandled Promise Rejection] Message: ${errorMessage} Stack: ${errorStack}`,
+        timestamp: new Date().toISOString(),
+        source: 'MDTODO.unhandledrejection',
+        args: ['[Unhandled Promise Rejection]', `Message: ${errorMessage}`, `Stack: ${errorStack}`]
+      });
+    }
+  } catch (e) {
+    console.error('[MDTODO] Error in unhandledrejection handler:', e);
+  }
+  // 阻止默认行为，防止浏览器显示警告
+  event.preventDefault();
+});
+
+/**
+ * 捕获全局错误
+ */
+window.addEventListener('error', (event) => {
+  try {
+    const error = event.error;
+    if (error && vscodeApi) {
+      vscodeApi.postMessage({
+        type: 'mdtodoLog',
+        level: 'error',
+        message: `[Global Error] Message: ${error.message} Stack: ${error.stack || ''}`,
+        timestamp: new Date().toISOString(),
+        source: 'MDTODO.globalError',
+        args: ['[Global Error]', `Message: ${error.message}`, `Stack: ${error.stack || ''}`]
+      });
+    }
+  } catch (e) {
+    console.error('[MDTODO] Error in global error handler:', e);
+  }
+});
+
+// ============================================
+// R54.8.3: 使用 try-catch 包装关键代码
+// ============================================
+
+// 启动应用函数 - 使用 try-catch 包装
+const init = () => {
+  try {
+    const container = document.getElementById('root');
+    if (container && !hasSentReady) {
+      const root = createRoot(container);
+
+      // 创建 TaskList 组件，传入 vscodeApi 和保存完成回调
+      root.render(
+        React.createElement(React.StrictMode, null,
+          React.createElement(TaskList, {
+            vscodeApi,
+            onSaveComplete: handleSaveComplete
+          })
+        )
+      );
+
+      // 通知 extension webview 已准备好
+      setTimeout(() => {
+        if (vscodeApi && !hasSentReady) {
+          window.MDTODO.log('[Webview] Sending ready message');
+          hasSentReady = true;
+          vscodeApi.postMessage({ type: 'ready' });
+        } else if (!vscodeApi) {
+          window.MDTODO.error('[Webview] Cannot send ready: vscodeApi is null');
+        }
+      }, 100);
+    }
+  } catch (error) {
+    window.MDTODO.errorHandler.logError(error as Error, 'init');
+  }
+};
+
+// 启动应用
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('[Webview] DOMContentLoaded - initializing');
+    init();
+  });
+} else {
+  // DOM already loaded
+  console.log('[Webview] DOM ready - initializing immediately');
+  init();
+}
