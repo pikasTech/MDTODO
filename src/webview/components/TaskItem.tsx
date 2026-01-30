@@ -163,36 +163,57 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
   const [canScrollUp, setCanScrollUp] = React.useState(false);
   const [canScrollDown, setCanScrollDown] = React.useState(false);
 
-  const updateScrollShadows = React.useCallback(() => {
-    if (childrenRef.current) {
-      const element = childrenRef.current;
-      const scrollTop = element.scrollTop;
-      const scrollHeight = element.scrollHeight;
-      const clientHeight = element.clientHeight;
-
-      const canUp = scrollTop > 0;
-      const canDown = scrollTop + clientHeight < scrollHeight - 1;
-
-      setCanScrollUp(canUp);
-      setCanScrollDown(canDown);
-    }
-  }, []);
-
+  // 当父任务展开/折叠或子任务内容变化时，重新计算阴影
   React.useEffect(() => {
     const element = childrenRef.current;
     if (!element) return;
 
-    updateScrollShadows();
+    // 使用双层 requestAnimationFrame 确保 DOM 完全更新后再计算
+    let rafId1: number;
+    let rafId2: number;
 
+    const calculateShadows = () => {
+      rafId2 = requestAnimationFrame(() => {
+        const scrollTop = element.scrollTop;
+        const scrollHeight = element.scrollHeight;
+        const clientHeight = element.clientHeight;
+
+        const canUp = scrollTop > 0;
+        const canDown = scrollTop + clientHeight < scrollHeight - 1;
+
+        setCanScrollUp(canUp);
+        setCanScrollDown(canDown);
+      });
+    };
+
+    rafId1 = requestAnimationFrame(calculateShadows);
+
+    // 监听 scroll 事件
     const handleScroll = () => {
-      updateScrollShadows();
+      if (rafId2) {
+        cancelAnimationFrame(rafId2);
+      }
+      rafId2 = requestAnimationFrame(() => {
+        const scrollTop = element.scrollTop;
+        const scrollHeight = element.scrollHeight;
+        const clientHeight = element.clientHeight;
+
+        const canUp = scrollTop > 0;
+        const canDown = scrollTop + clientHeight < scrollHeight - 1;
+
+        setCanScrollUp(canUp);
+        setCanScrollDown(canDown);
+      });
     };
 
     element.addEventListener('scroll', handleScroll, { passive: true });
+
     return () => {
       element.removeEventListener('scroll', handleScroll);
+      if (rafId1) cancelAnimationFrame(rafId1);
+      if (rafId2) cancelAnimationFrame(rafId2);
     };
-  }, [expandedTasks, showChildrenCount, task.children, updateScrollShadows]);
+  }, [expandedTasks, showChildrenCount, task.children]);
 
   React.useEffect(() => {
     if (editingTaskParentId === task.id && childrenRef.current) {
@@ -440,10 +461,10 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
     ),
     hasChildren && React.createElement('ul', {
       ref: childrenRef,
-      className: `children${!isExpanded ? ' collapsed-preview' : ''}${canScrollUp ? ' can-scroll-up' : ''}${canScrollDown ? ' can-scroll-down' : ''}`,
+      className: `children${!isExpanded && depth === 0 ? ' collapsed-preview' : ''}${canScrollUp ? ' can-scroll-up' : ''}${canScrollDown ? ' can-scroll-down' : ''}`,
       style: childrenStyle
     },
-      !isExpanded && React.createElement('div', { className: 'scroll-shadow-top' }),
+      !isExpanded && depth === 0 && React.createElement('div', { className: 'scroll-shadow-top' }),
       (task.children || []).map((child, index) =>
         React.createElement(TaskItem, {
           key: child.id,
@@ -474,7 +495,7 @@ export const TaskItem: React.FC<TaskItemProps> = (props) => {
           onTaskContentContextMenu,
         })
       ),
-      !isExpanded && React.createElement('div', { className: 'scroll-shadow-bottom' })
+      !isExpanded && depth === 0 && React.createElement('div', { className: 'scroll-shadow-bottom' })
     )
   );
 };

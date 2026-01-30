@@ -155,6 +155,35 @@ window.MDTODO.error = (...args: any[]) => {
 // ============================================
 
 /**
+ * 内部日志函数 - 不依赖 window.MDTODO
+ */
+const internalLogError = (error: Error | string, context?: string) => {
+  try {
+    const errorMessage = typeof error === 'string' ? error : error.message;
+    const errorStack = typeof error === 'string' ? '' : error.stack || '';
+
+    if (vscodeApi) {
+      vscodeApi.postMessage({
+        type: 'mdtodoLog',
+        level: 'error',
+        message: `[Error Context: ${context || 'N/A'}] Message: ${errorMessage} Stack: ${errorStack}`,
+        timestamp: new Date().toISOString(),
+        source: 'MDTODO.errorHandler',
+        args: [`[Error Context: ${context || 'N/A'}]`, `Message: ${errorMessage}`, `Stack: ${errorStack}`]
+      });
+    }
+  } catch (e) {
+    // 最后的备用方案
+    try {
+      const originalError = error instanceof Error ? error : new Error(String(error));
+      console.error('[MDTODO ErrorHandler]', context, originalError.message, originalError.stack);
+    } catch {
+      // 静默失败
+    }
+  }
+};
+
+/**
  * 全局错误处理器 - 捕获并记录未处理的异常
  */
 window.MDTODO.errorHandler = {
@@ -162,23 +191,7 @@ window.MDTODO.errorHandler = {
    * 记录错误到扩展端
    */
   logError: (error: Error | string, context?: string) => {
-    try {
-      const errorMessage = typeof error === 'string' ? error : error.message;
-      const errorStack = typeof error === 'string' ? '' : error.stack || '';
-
-      if (vscodeApi) {
-        vscodeApi.postMessage({
-          type: 'mdtodoLog',
-          level: 'error',
-          message: `[Error Context: ${context || 'N/A'}] Message: ${errorMessage} Stack: ${errorStack}`,
-          timestamp: new Date().toISOString(),
-          source: 'MDTODO.errorHandler',
-          args: [`[Error Context: ${context || 'N/A'}]`, `Message: ${errorMessage}`, `Stack: ${errorStack}`]
-        });
-      }
-    } catch (e) {
-      console.error('[MDTODO] Error in errorHandler.logError:', e);
-    }
+    internalLogError(error, context);
   },
 
   /**
@@ -189,7 +202,7 @@ window.MDTODO.errorHandler = {
       try {
         return fn.apply(this, args);
       } catch (error) {
-        window.MDTODO.errorHandler.logError(error as Error, context);
+        internalLogError(error as Error, context);
         throw error;
       }
     };
@@ -200,7 +213,7 @@ window.MDTODO.errorHandler = {
    */
   wrapPromise: (promise: Promise<any>, context?: string): Promise<any> => {
     return promise.catch(error => {
-      window.MDTODO.errorHandler.logError(error as Error, context);
+      internalLogError(error as Error, context);
       return Promise.reject(error);
     });
   }
@@ -238,6 +251,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 /**
  * 捕获全局错误
+ * 直接使用 vscodeApi.postMessage，避免依赖 window.MDTODO（可能在某些情况下未初始化）
  */
 window.addEventListener('error', (event) => {
   try {
@@ -253,13 +267,45 @@ window.addEventListener('error', (event) => {
       });
     }
   } catch (e) {
-    console.error('[MDTODO] Error in global error handler:', e);
+    // 最后的备用方案：直接使用原生 console
+    try {
+      const originalError = error instanceof Error ? error : new Error(String(error));
+      console.error('[MDTODO Global Error]', originalError.message, originalError.stack);
+    } catch (fallbackError) {
+      // 静默失败，避免递归错误
+    }
   }
 });
 
 // ============================================
 // R54.8.3: 使用 try-catch 包装关键代码
 // ============================================
+
+// 辅助函数：安全调用 MDTODO.log（处理未初始化的情况）
+const safeLog = (...args: any[]) => {
+  try {
+    if (typeof window.MDTODO?.log === 'function') {
+      window.MDTODO.log(...args);
+    } else {
+      console.log('[MDTODO]', ...args);
+    }
+  } catch {
+    console.log('[MDTODO]', ...args);
+  }
+};
+
+// 辅助函数：安全调用 MDTODO.error（处理未初始化的情况）
+const safeError = (...args: any[]) => {
+  try {
+    if (typeof window.MDTODO?.error === 'function') {
+      window.MDTODO.error(...args);
+    } else {
+      console.error('[MDTODO]', ...args);
+    }
+  } catch {
+    console.error('[MDTODO]', ...args);
+  }
+};
 
 // 启动应用函数 - 使用 try-catch 包装
 const init = () => {
@@ -281,16 +327,16 @@ const init = () => {
       // 通知 extension webview 已准备好
       setTimeout(() => {
         if (vscodeApi && !hasSentReady) {
-          window.MDTODO.log('[Webview] Sending ready message');
+          safeLog('[Webview] Sending ready message');
           hasSentReady = true;
           vscodeApi.postMessage({ type: 'ready' });
         } else if (!vscodeApi) {
-          window.MDTODO.error('[Webview] Cannot send ready: vscodeApi is null');
+          safeError('[Webview] Cannot send ready: vscodeApi is null');
         }
       }, 100);
     }
   } catch (error) {
-    window.MDTODO.errorHandler.logError(error as Error, 'init');
+    safeError('[MDTODO] Error in init:', error);
   }
 };
 
