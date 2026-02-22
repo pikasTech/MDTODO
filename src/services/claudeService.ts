@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { platform } from 'os';
 import { logTaskEvent, getSessionTodoFilePath, getLogsDirectoryPath, ensureLogsDirectory } from './logService';
+import { SettingsService } from './settingsService';
 
 export interface ExecutionResult {
   success: boolean;
@@ -54,17 +55,45 @@ export function generateClaudeExecuteArgs(todoFilePath: string, taskId: string):
 export class ClaudeService {
   private outputChannel: vscode.OutputChannel;
   private currentProcess: ChildProcess | undefined;
+  private settingsService: SettingsService;
 
   constructor() {
     this.outputChannel = vscode.window.createOutputChannel('MDTODO Claude');
+    this.settingsService = new SettingsService();
   }
 
   async executeTask(todoFilePath: string, taskId: string): Promise<ExecutionResult> {
+    // 获取工作区路径
+    const workspacePath = getWorkspaceFolderPath();
+    if (!workspacePath) {
+      return {
+        success: false,
+        output: '',
+        error: '未找到工作区路径'
+      };
+    }
+
+    // 从 settingsService 获取 executionMode 配置
+    const executionMode = await this.settingsService.getExecutionMode(workspacePath);
+
+    // 根据 executionMode 选择执行方式
+    if (executionMode === 'opencode') {
+      return this.executeTaskWithOpenCode(todoFilePath, taskId);
+    } else {
+      return this.executeTaskWithClaude(todoFilePath, taskId);
+    }
+  }
+
+  /**
+   * 【R54.9.4.1】使用 Claude 执行任务
+   */
+  private async executeTaskWithClaude(todoFilePath: string, taskId: string): Promise<ExecutionResult> {
     const os = platform();
 
     this.outputChannel.show();
     this.outputChannel.appendLine(`开始执行任务: ${taskId}`);
     this.outputChannel.appendLine(`文件: ${todoFilePath}`);
+    this.outputChannel.appendLine('模式: Claude Code');
     this.outputChannel.appendLine('---');
 
     try {
@@ -88,7 +117,8 @@ export class ClaudeService {
         await logTaskEvent(logsDir, todoFilePath, taskId, 'taskExecute', {
           command: fullCommand,
           mode: 'new_terminal',
-          platform: os
+          platform: os,
+          executor: 'claude'
         });
       }
 
@@ -114,7 +144,78 @@ export class ClaudeService {
 
       return {
         success: true,
-        output: `任务 ${taskId} 已提交执行，请查看新打开的终端窗口`
+        output: `任务 ${taskId} 已提交执行（Claude Code），请查看新打开的终端窗口`
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        output: '',
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 【R54.9.4.1】使用 OpenCode 执行任务
+   */
+  private async executeTaskWithOpenCode(todoFilePath: string, taskId: string): Promise<ExecutionResult> {
+    const os = platform();
+
+    this.outputChannel.show();
+    this.outputChannel.appendLine(`开始执行任务: ${taskId}`);
+    this.outputChannel.appendLine(`文件: ${todoFilePath}`);
+    this.outputChannel.appendLine('模式: OpenCode');
+    this.outputChannel.appendLine('---');
+
+    try {
+      // 获取工作区路径
+      const workspacePath = getWorkspaceFolderPath();
+
+      if (workspacePath) {
+        this.outputChannel.appendLine(`工作区: ${workspacePath}`);
+      } else {
+        this.outputChannel.appendLine(`警告: 未找到工作区，使用绝对路径`);
+      }
+
+      // 【R54.3】使用命令生成函数获取参数字符串
+      const taskDescription = generateClaudeExecuteArgs(todoFilePath, taskId);
+
+      // 【R54.5.2】【R54.6.6】记录任务执行开始日志（使用统一日志系统）
+      // OpenCode 使用 run 命令
+      const fullCommand = `opencode run "${taskDescription}"`;
+      if (workspacePath) {
+        const logsDir = getLogsDirectoryPath(workspacePath);
+        await ensureLogsDirectory(logsDir);
+        await logTaskEvent(logsDir, todoFilePath, taskId, 'taskExecute', {
+          command: fullCommand,
+          mode: 'new_terminal',
+          platform: os,
+          executor: 'opencode'
+        });
+      }
+
+      // Windows: 使用 start 打开新终端窗口执行 opencode run 命令
+      if (os === 'win32') {
+        spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/c', 'opencode', 'run', taskDescription], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true
+        });
+      } else if (os === 'darwin') {
+        spawn('open', ['-a', 'Terminal', '--args', 'opencode', 'run', taskDescription], {
+          detached: true,
+          stdio: 'ignore'
+        });
+      } else {
+        spawn('xterm', ['-e', 'opencode', 'run', taskDescription], {
+          detached: true,
+          stdio: 'ignore'
+        });
+      }
+
+      return {
+        success: true,
+        output: `任务 ${taskId} 已提交执行（OpenCode），请查看新打开的终端窗口`
       };
     } catch (error: any) {
       return {

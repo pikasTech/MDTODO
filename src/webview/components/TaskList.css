@@ -1242,3 +1242,15 @@
 .context-menu-item:hover {
   background-color: #3c3c3c;
 }
+
+/* 【R54.9】设置面板样式 */
+.settings-panel {
+  position: fixed;
+  z-index: 10000;
+  background-color: #2d2d2d;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  min-width: 280px;
+  padding: 16px;
+}

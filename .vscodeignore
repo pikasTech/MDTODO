@@ -30,3 +30,35 @@ doc/
 
 # Exclude pack.bat from package (not needed in production)
 pack.bat
+
+# ============================================
+# Exclude large development files from VSIX
+# ============================================
+
+# CLI 工具目录（Python 实现，不需要打包到 VSIX）
+cli/
+
+# 文档目录（不需要打包到 VSIX）
+docs/
+docs-details/
+
+# Claude 相关目录（开发配置）
+.claude/
+
+# Playwright 测试截图
+.playwright-mcp/
+
+# 安装脚本（不需要打包）
+install.bat
+
+# 其他开发文件
+*.bat
+*.sh
+readme.md
+CLAUDE.md
+tsconfig.json
+tsconfig.webview.json
+
+# Webpack 配置
+webpack.config.js
+webpack.*.js

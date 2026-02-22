@@ -69,6 +69,11 @@ export interface TaskListStateReturn {
   textBlockEditModes: Record<string, boolean>;
   setTextBlockEditModes: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   displayTitle: string;
+  // 【R54.9.2.1】设置面板状态
+  settingsPanelOpen: boolean;
+  setSettingsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  executionMode: 'claude' | 'opencode';
+  setExecutionMode: React.Dispatch<React.SetStateAction<'claude' | 'opencode'>>;
   // Computed
   allTasks: Task[];
   incompleteCount: number;
@@ -112,6 +117,10 @@ export const useTaskListState = (props: TaskListStateProps): TaskListStateReturn
     taskTitle?: string;
   } | null>(null);
   const [textBlockEditModes, setTextBlockEditModes] = React.useState<Record<string, boolean>>({});
+
+  // 【R54.9.2.1】设置面板状态
+  const [settingsPanelOpen, setSettingsPanelOpen] = React.useState(false);
+  const [executionMode, setExecutionMode] = React.useState<'claude' | 'opencode'>('claude');
 
   // Computed values
   const [displayTitle, setDisplayTitle] = React.useState(() => getFileName(filePath));
@@ -179,6 +188,11 @@ export const useTaskListState = (props: TaskListStateProps): TaskListStateReturn
     setTextBlockEditModes,
     displayTitle,
     setDisplayTitle,
+    // 【R54.9.2.1】设置面板状态
+    settingsPanelOpen,
+    setSettingsPanelOpen,
+    executionMode,
+    setExecutionMode,
     allTasks,
     incompleteCount,
     filteredTasks,

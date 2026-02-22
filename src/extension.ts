@@ -3,6 +3,7 @@ import { TodoParser } from './parser';
 import { TodoWebviewProvider, setGlobalLogsDir } from './providers/webviewProvider';
 import { FileService } from './services/fileService';
 import { ClaudeService } from './services/claudeService';
+import { SettingsService } from './services/settingsService';
 import { TodoTask } from './types';
 import {
   getLogsDirectoryPath,
@@ -18,9 +19,13 @@ const webviewProviders = new Map<string, TodoWebviewProvider>();
 let parser: TodoParser;
 let fileService: FileService;
 let claudeService: ClaudeService;
+let settingsService: SettingsService;
 
 // Extension version from package.json
 const EXTENSION_VERSION = '0.0.2';
+
+// 【R54.9.3.1】存储工作区路径供 settingsService 使用
+let workspacePath: string = '';
 
 /**
  * 获取或创建指定文件的 webview provider
@@ -83,9 +88,10 @@ export async function activate(context: vscode.ExtensionContext) {
   parser = new TodoParser();
   fileService = new FileService();
   claudeService = new ClaudeService();
+  settingsService = new SettingsService();
 
   // 【R54.6.2】获取工作区路径并初始化日志
-  const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+  workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
   let logsDir: string | null = null;
   let primaryTodoFilePath: string | null = null;
   if (workspacePath) {
@@ -398,6 +404,41 @@ function setupFileWatcher(context: vscode.ExtensionContext, logsDir: string | nu
   });
 
   context.subscriptions.push(watcher);
+}
+
+/**
+ * 【R54.9.3.1】获取当前执行模式
+ * @returns Promise that resolves to current execution mode
+ */
+export async function getExecutionMode(): Promise<'claude' | 'opencode'> {
+  if (!workspacePath) {
+    return 'claude';
+  }
+  return settingsService.getExecutionMode(workspacePath);
+}
+
+/**
+ * 【R54.9.3.1】更新执行模式
+ * @param mode 新的执行模式 ('claude' | 'opencode')
+ * @returns Promise that resolves when the mode is updated
+ */
+export async function updateExecutionMode(mode: 'claude' | 'opencode'): Promise<void> {
+  if (!workspacePath) {
+    throw new Error('Workspace path not available');
+  }
+  await settingsService.updateExecutionMode(workspacePath, mode);
+}
+
+/**
+ * 【R54.9.3.1】获取完整配置
+ * @returns Promise that resolves to current settings config
+ */
+export async function getSettings(): Promise<{ executionMode: 'claude' | 'opencode' }> {
+  if (!workspacePath) {
+    return { executionMode: 'claude' };
+  }
+  const config = await settingsService.readSettings(workspacePath);
+  return { executionMode: config.executionMode };
 }
 
 export async function deactivate() {

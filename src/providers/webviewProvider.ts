@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import { TodoTask, TodoFile, TextBlock } from '../types';
 import { FileService } from '../services/fileService';
 import { generateClaudeExecuteArgs } from '../services/claudeService';
+import { SettingsService } from '../services/settingsService';
 import { TyporaService } from './services/typoraService';
 import { ScrollSyncManager } from './scrollSyncManager';
 import { LinkHandler } from './linkHandler';
@@ -42,6 +43,8 @@ export class TodoWebviewProvider {
   private panelManager!: PanelManager;
   private taskFileManager!: TaskFileManager;
   private commandGenerator!: CommandGenerator;
+  // R54.9.5: 设置服务实例
+  private settingsService!: SettingsService;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -92,6 +95,9 @@ export class TodoWebviewProvider {
     this.commandGenerator = new CommandGenerator({
       currentFilePath: this.currentFilePath,
     });
+
+    // R54.9.5: 初始化设置服务
+    this.settingsService = new SettingsService();
   }
 
   /**
@@ -134,12 +140,26 @@ export class TodoWebviewProvider {
         panel.webview.postMessage(customMessage);
       } else {
         const workspacePath = this.getWorkspaceFolderPath();
-        panel.webview.postMessage({
-          type: 'updateTasks',
-          tasks: this.serializeTasks(this.currentTasks),
-          textBlocks: this.currentTextBlocks,
-          filePath: this.currentFilePath,
-          workspacePath: workspacePath
+        // R54.9.5: 获取当前执行模式并发送给 webview
+        this.settingsService.readSettings(workspacePath).then(config => {
+          panel.webview.postMessage({
+            type: 'updateTasks',
+            tasks: this.serializeTasks(this.currentTasks),
+            textBlocks: this.currentTextBlocks,
+            filePath: this.currentFilePath,
+            workspacePath: workspacePath,
+            executionMode: config.executionMode
+          });
+        }).catch(error => {
+          console.error('[MDTODO] Failed to read execution mode:', error);
+          panel.webview.postMessage({
+            type: 'updateTasks',
+            tasks: this.serializeTasks(this.currentTasks),
+            textBlocks: this.currentTextBlocks,
+            filePath: this.currentFilePath,
+            workspacePath: workspacePath,
+            executionMode: 'claude' // 默认值
+          });
         });
       }
     }
@@ -303,6 +323,10 @@ export class TodoWebviewProvider {
       case 'mdtodoLog':
         await this.handleWebviewLog(message);
         break;
+      // R54.9.5: 处理执行模式变更消息
+      case 'executionModeChanged':
+        await this.handleExecutionModeChanged(message.mode);
+        break;
     }
   }
 
@@ -445,6 +469,28 @@ export class TodoWebviewProvider {
       } catch (error) {
         console.error('[MDTODO] Failed to write webview log:', error);
       }
+    }
+  }
+
+  // R54.9.5: 处理执行模式变更
+  private async handleExecutionModeChanged(mode: 'claude' | 'opencode'): Promise<void> {
+    const workspacePath = this.getWorkspaceFolderPath();
+    if (!workspacePath) {
+      console.error('[MDTODO] No workspace path found for saving execution mode');
+      return;
+    }
+
+    try {
+      await this.settingsService.updateExecutionMode(workspacePath, mode);
+      console.log(`[MDTODO] Execution mode saved: ${mode}`);
+
+      // 发送确认消息给 webview
+      this.sendToWebview({
+        type: 'executionModeUpdated',
+        mode: mode
+      });
+    } catch (error) {
+      console.error('[MDTODO] Failed to save execution mode:', error);
     }
   }
 

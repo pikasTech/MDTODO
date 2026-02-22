@@ -6,6 +6,7 @@ import { TaskItem } from './TaskItem';
 import { renderTextBlocks } from './TaskBlock';
 import { Toolbar } from './Toolbar';
 import { TaskContextMenu } from './ContextMenu';
+import { SettingsPanel, ExecutionMode } from './Settings';
 import {
   useTaskListState,
   useTaskOperations,
@@ -157,6 +158,11 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     setTextBlockEditModes,
     displayTitle,
     setDisplayTitle,
+    // 【R54.9.2.1】设置面板状态
+    settingsPanelOpen,
+    setSettingsPanelOpen,
+    executionMode,
+    setExecutionMode,
     allTasks,
     incompleteCount,
     filteredTasks,
@@ -358,6 +364,19 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     { type: 'processing' as const, label: '进行中' },
   ];
 
+  // 【R54.9.2.1】打开设置面板
+  const handleOpenSettings = React.useCallback(() => {
+    setSettingsPanelOpen(true);
+  }, [setSettingsPanelOpen]);
+
+  // 【R54.9.2.1】处理执行模式变更
+  const handleExecutionModeChange = React.useCallback((mode: ExecutionMode) => {
+    setExecutionMode(mode);
+    setSettingsPanelOpen(false);
+    // 可以在这里发送消息到扩展端保存设置
+    sendMessage({ type: 'executionModeChanged', mode });
+  }, [setExecutionMode, setSettingsPanelOpen, sendMessage]);
+
   // Has active filters
   const hasActiveFilters = filterType !== 'all';
 
@@ -404,6 +423,7 @@ const TaskList: React.FC<TaskListProps> = (props) => {
         setFilterType,
         handleClearFilter: operations.handleClearFilter,
         handleAddTask: operations.handleAddTask,
+        handleOpenSettings,
         getAllTaskIds: (list: Task[]) => {
           let result: string[] = [];
           const collect = (taskList: Task[]) => {
@@ -485,6 +505,13 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       onCopyLinkPath: linkOps.handleCopyLinkPath,
       onCopyLinkRelativePath: linkOps.handleCopyLinkRelativePath,
       onDeleteLinkFile: linkOps.handleDeleteLinkFile,
+    }),
+    // 【R54.9.2.1】设置面板
+    React.createElement(SettingsPanel, {
+      isOpen: settingsPanelOpen,
+      executionMode,
+      onClose: () => setSettingsPanelOpen(false),
+      onChange: handleExecutionModeChange,
     })
   );
 };
