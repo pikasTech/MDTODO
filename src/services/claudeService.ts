@@ -179,10 +179,11 @@ export class ClaudeService {
 
       // 【R54.3】使用命令生成函数获取参数字符串
       const taskDescription = generateClaudeExecuteArgs(todoFilePath, taskId);
+      const model = 'minimax/MiniMax-M2.5';
 
       // 【R54.5.2】【R54.6.6】记录任务执行开始日志（使用统一日志系统）
-      // OpenCode 使用 run 命令
-      const fullCommand = `opencode run "${taskDescription}"`;
+      // OpenCode 使用 --prompt 参数
+      const fullCommand = `opencode --model ${model} --prompt "${taskDescription}"`;
       if (workspacePath) {
         const logsDir = getLogsDirectoryPath(workspacePath);
         await ensureLogsDirectory(logsDir);
@@ -194,23 +195,25 @@ export class ClaudeService {
         });
       }
 
-      // Windows: 使用 start 打开新终端窗口执行 opencode run 命令
+      // 设置 spawn 选项，使用工作区路径作为工作目录
+      const spawnOptions: any = {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      };
+
+      // 如果有工作区路径，设置工作目录
+      if (workspacePath) {
+        spawnOptions.cwd = workspacePath;
+      }
+
+      // Windows: 使用 start 打开新终端窗口执行 opencode --model --prompt 命令
       if (os === 'win32') {
-        spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/c', 'opencode', 'run', taskDescription], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true
-        });
+        spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/c', 'opencode', '--model', model, '--prompt', taskDescription], spawnOptions);
       } else if (os === 'darwin') {
-        spawn('open', ['-a', 'Terminal', '--args', 'opencode', 'run', taskDescription], {
-          detached: true,
-          stdio: 'ignore'
-        });
+        spawn('open', ['-a', 'Terminal', '--args', 'opencode', '--model', model, '--prompt', taskDescription], spawnOptions);
       } else {
-        spawn('xterm', ['-e', 'opencode', 'run', taskDescription], {
-          detached: true,
-          stdio: 'ignore'
-        });
+        spawn('xterm', ['-e', 'opencode', '--model', model, '--prompt', taskDescription], spawnOptions);
       }
 
       return {
