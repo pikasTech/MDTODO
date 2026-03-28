@@ -6,8 +6,18 @@ export type ExecutionMode = 'claude' | 'opencode';
 interface SettingsPanelProps {
   isOpen: boolean;
   executionMode: ExecutionMode;
+  model?: string;
+  models: ModelInfo[];
   onClose: () => void;
   onChange: (mode: ExecutionMode) => void;
+  onModelChange: (model: string) => void;
+  onFetchModels: () => void;
+}
+
+interface ModelInfo {
+  id: string;
+  name: string;
+  provider: string;
 }
 
 // 面板宽度（px）
@@ -16,9 +26,26 @@ const PANEL_WIDTH = 280;
 const PANEL_PADDING = 16;
 
 const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
-  const { isOpen, executionMode, onClose, onChange } = props;
+  const { isOpen, executionMode, model, models: externalModels, onClose, onChange, onModelChange, onFetchModels } = props;
   const panelRef = React.useRef<HTMLDivElement>(null);
   const [show, setShow] = React.useState(false);
+  const [models, setModels] = React.useState<ModelInfo[]>(externalModels || []);
+  const [loadingModels, setLoadingModels] = React.useState(false);
+  const [modelError, setModelError] = React.useState<string | null>(null);
+
+  // 当外部 models 更新时同步到内部状态
+  React.useEffect(() => {
+    if (externalModels && externalModels.length > 0) {
+      console.log('[SettingsPanel] Syncing external models:', externalModels.length);
+      setModels(externalModels);
+    }
+  }, [externalModels]);
+
+  // 处理刷新模型列表
+  const handleFetchModels = React.useCallback(() => {
+    setLoadingModels(true);
+    onFetchModels();
+  }, [onFetchModels]);
 
   // 处理显示动画
   React.useEffect(() => {
@@ -206,6 +233,74 @@ const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
         )
       )
     ),
+    // OpenCode 模式下的模型选择
+    executionMode === 'opencode' && React.createElement('div', {
+      style: {
+        marginTop: '16px',
+      }
+    },
+      React.createElement('label', {
+        style: {
+          display: 'block',
+          fontSize: '12px',
+          color: '#888',
+          marginBottom: '8px',
+        }
+      }, '模型选择'),
+      React.createElement('div', {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+        }
+      },
+        // 刷新按钮
+        React.createElement('button', {
+          onClick: handleFetchModels,
+          style: {
+            padding: '8px 12px',
+            backgroundColor: '#252526',
+            border: '1px solid #3c3c3c',
+            borderRadius: '4px',
+            color: '#d4d4d4',
+            fontSize: '12px',
+            cursor: 'pointer',
+            textAlign: 'left',
+          }
+        }, loadingModels ? '加载中...' : '刷新模型列表'),
+        // 模型下拉选择
+        models.length > 0 && React.createElement('select', {
+          value: model || '',
+          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => onModelChange(e.target.value),
+          style: {
+            padding: '8px 12px',
+            backgroundColor: '#252526',
+            border: '1px solid #3c3c3c',
+            borderRadius: '4px',
+            color: '#d4d4d4',
+            fontSize: '12px',
+            cursor: 'pointer',
+            width: '100%',
+          }
+        },
+          React.createElement('option', { value: '' }, '选择模型...'),
+          models.map((m) =>
+            React.createElement('option', {
+              key: m.id,
+              value: m.id
+            }, `${m.provider}/${m.name}`)
+          )
+        ),
+        // 当前选择的模型
+        model && React.createElement('div', {
+          style: {
+            fontSize: '11px',
+            color: '#666',
+            marginTop: '4px',
+          }
+        }, `当前: ${model}`)
+      )
+    ),
     // 底部说明
     React.createElement('div', {
       style: {
@@ -221,4 +316,4 @@ const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
 };
 
 export { SettingsPanel };
-export type { SettingsPanelProps, ExecutionMode };
+export type { SettingsPanelProps };

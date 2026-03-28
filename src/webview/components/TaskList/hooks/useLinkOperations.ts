@@ -124,7 +124,13 @@ export const useLinkOperations = (params: LinkOperationsParams) => {
 
   // Copy execute command
   const handleCopyExecuteCommand = React.useCallback(() => {
+    console.log('[Webview] handleCopyExecuteCommand called', {
+      contextMenuExists: !!contextMenu,
+      contextMenuTaskId: contextMenu?.taskId,
+      href: contextMenu?.href
+    });
     if (contextMenu && contextMenu.taskId) {
+      console.log('[Webview] Sending generateExecuteCommand with taskId:', contextMenu.taskId);
       sendMessage({
         type: 'generateExecuteCommand',
         taskId: contextMenu.taskId
@@ -155,6 +161,14 @@ export const useLinkOperations = (params: LinkOperationsParams) => {
     const target = e.target as HTMLElement;
     const anchorElement = target.closest('a');
     const href = anchorElement ? anchorElement.getAttribute('href') : null;
+
+    console.log('[Webview] handleTaskContentContextMenu called', {
+      taskId: taskId,
+      targetTagName: target.tagName,
+      targetClassName: target.className,
+      hasAnchor: !!anchorElement,
+      href: href
+    });
 
     e.preventDefault();
     e.stopPropagation();

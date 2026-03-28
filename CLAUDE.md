@@ -8,12 +8,14 @@ VSCode extension that renders Markdown TODO files as an interactive tree view wi
 
 ## Commands
 
+**注意**: Windows 下使用 `npm.cmd` 代替 `npm`
+
 ```bash
-npm install              # Install dependencies
-npm run watch            # Development: watch mode with hot reload (F5 to debug)
-npm run compile          # Full build: TypeScript compilation + webpack bundling
-npm run package          # Package as .vsix for distribution
-npm run test             # Run Jest tests
+npm.cmd install          # Install dependencies
+npm.cmd run watch        # Development: watch mode with hot reload (F5 to debug)
+npm.cmd run compile      # Full build: TypeScript compilation + webpack bundling
+npm.cmd run package      # Package as .vsix for distribution
+npm.cmd run test         # Run Jest tests
 ```
 
 ## Architecture

@@ -11,13 +11,15 @@ import * as path from 'path';
  */
 export interface SettingsConfig {
   executionMode: 'claude' | 'opencode';
+  model?: string;
 }
 
 /**
  * 默认配置
  */
 const DEFAULT_CONFIG: SettingsConfig = {
-  executionMode: 'claude',
+  executionMode: 'opencode',
+  model: undefined,
 };
 
 /**
@@ -69,6 +71,7 @@ export class SettingsService {
       // 验证并返回配置
       return {
         executionMode: config.executionMode || DEFAULT_CONFIG.executionMode,
+        model: config.model,
       };
     } catch (error: unknown) {
       const err = error as Error & { code?: string };
@@ -102,6 +105,7 @@ export class SettingsService {
     // 合并配置
     const mergedConfig: SettingsConfig = {
       executionMode: config.executionMode ?? existingConfig.executionMode,
+      model: config.model ?? existingConfig.model,
     };
 
     const uri = vscode.Uri.file(settingsPath);
@@ -140,5 +144,30 @@ export class SettingsService {
   ): Promise<'claude' | 'opencode'> {
     const config = await this.readSettings(workspacePath);
     return config.executionMode;
+  }
+
+  /**
+   * 更新模型设置
+   * @param workspacePath 工作区根路径
+   * @param model 新的模型名称
+   * @returns Promise that resolves when the model is updated
+   */
+  async updateModel(
+    workspacePath: string,
+    model: string
+  ): Promise<void> {
+    await this.writeSettings(workspacePath, { model });
+  }
+
+  /**
+   * 获取当前模型
+   * @param workspacePath 工作区根路径
+   * @returns Promise that resolves to current model or undefined
+   */
+  async getModel(
+    workspacePath: string
+  ): Promise<string | undefined> {
+    const config = await this.readSettings(workspacePath);
+    return config.model;
   }
 }

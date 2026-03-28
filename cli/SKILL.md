@@ -410,3 +410,104 @@ node ~/.claude/skills/mdtodo-edit/scripts/dist/cli.js list -f ./TODO.md
 
 1. 先执行 `list -f /absolute/path/to/TODO.md` 确认文件存在
 2. 执行 `get R1 -f /absolute/path/to/TODO.md` 确认任务 ID 正确
+
+---
+
+## Debug 调试命令
+
+### 1. debug model-list - 列出可用模型
+
+**命令格式：**
+```bash
+node dist/cli.js debug model-list
+```
+
+**说明：**
+- 调用 `opencode models` 获取可用模型列表
+- 需要确保 `opencode` CLI 已安装并在 PATH 中
+
+**输出示例：**
+```json
+{
+  "success": true,
+  "count": 54,
+  "models": [
+    { "id": "minimax/MiniMax-M2.5", "name": "MiniMax M2.5", "provider": "minimax" },
+    { "id": "github-copilot/claude-opus-4.6", "name": "claude opus 4.6", "provider": "github-copilot" }
+  ]
+}
+```
+
+**错误示例（opencode 未安装）：**
+```json
+{
+  "success": false,
+  "error": "Failed to spawn opencode: ..."
+}
+```
+
+---
+
+### 2. debug config-get - 获取当前配置
+
+**命令格式：**
+```bash
+node dist/cli.js debug config-get [-w <workspace-path>]
+```
+
+**选项：**
+| 选项 | 说明 |
+|-----|------|
+| `-w, --workspace <path>` | 工作区路径（默认当前目录） |
+
+**输出示例：**
+```json
+{
+  "success": true,
+  "configPath": "/path/to/workspace/.vscode/mdtodo/settings.json",
+  "config": {
+    "executionMode": "opencode",
+    "model": "minimax/MiniMax-M2.5"
+  }
+}
+```
+
+---
+
+### 3. debug config-set - 设置配置项
+
+**命令格式：**
+```bash
+node dist/cli.js debug config-set <key> <value> [-w <workspace-path>]
+```
+
+**支持的配置项：**
+
+| Key | Value | 说明 |
+|-----|-------|------|
+| `executionMode` | `claude` 或 `opencode` | 执行模式 |
+| `model` | 模型名称字符串 | 模型名称 |
+
+**示例：**
+```bash
+# 设置执行模式为 opencode
+node dist/cli.js debug config-set executionMode opencode
+
+# 设置模型
+node dist/cli.js debug config-set model "minimax/MiniMax-M2.5"
+
+# 指定工作区路径
+node dist/cli.js debug config-set executionMode claude -w /path/to/workspace
+```
+
+**输出示例：**
+```json
+{
+  "success": true,
+  "configPath": "/path/to/workspace/.vscode/mdtodo/settings.json",
+  "config": {
+    "executionMode": "claude",
+    "model": "minimax/MiniMax-M2.5"
+  }
+}
+```

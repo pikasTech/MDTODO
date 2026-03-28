@@ -12,6 +12,9 @@ export interface MessageHandlerParams {
   setEditingTaskIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   editingTaskIdsRef: React.MutableRefObject<Set<string>>;
   setPendingScrollTaskId: React.Dispatch<React.SetStateAction<string | null>>;
+  setExecutionMode?: React.Dispatch<React.SetStateAction<'claude' | 'opencode'>>;
+  setModel?: React.Dispatch<React.SetStateAction<string>>;
+  setModels?: React.Dispatch<React.SetStateAction<Array<{ id: string; name: string; provider: string }>>>;
   handleRefreshTaskTitle: (taskId: string, newTitle: string) => void;
   handleScrollToTask: (taskId: string, lineNumber: number) => void;
 }
@@ -27,6 +30,9 @@ export const useTaskListMessages = (params: MessageHandlerParams) => {
     setEditingTaskIds,
     editingTaskIdsRef,
     setPendingScrollTaskId,
+    setExecutionMode,
+    setModel,
+    setModels,
     handleRefreshTaskTitle,
     handleScrollToTask,
   } = params;
@@ -41,6 +47,14 @@ export const useTaskListMessages = (params: MessageHandlerParams) => {
         setCurrentFilePath(message.filePath || '');
         setWorkspacePath(message.workspacePath || '');
         setDisplayTitle(getFileName(message.filePath || ''));
+
+        // R54.9.6: 更新执行模式和模型
+        if (setExecutionMode && message.executionMode) {
+          setExecutionMode(message.executionMode);
+        }
+        if (setModel && message.model !== undefined) {
+          setModel(message.model);
+        }
 
         const currentlyEditing = Array.from(editingTaskIdsRef.current);
         const allCurrentTaskIds = getAllTaskIds(message.tasks || []);
@@ -80,6 +94,18 @@ export const useTaskListMessages = (params: MessageHandlerParams) => {
             console.error('[Webview] 复制失败:', err);
           });
         }
+      } else if (message.type === 'modelsUpdated') {
+        console.log('[Webview] Received modelsUpdated:', message.models?.length, 'models');
+        if (setModels) {
+          setModels(message.models || []);
+        }
+        if (message.error) {
+          console.error('[Webview] Failed to fetch models:', message.error);
+        }
+      } else if (message.type === 'executionModeUpdated') {
+        if (setExecutionMode && message.mode) {
+          setExecutionMode(message.mode);
+        }
       }
     };
 
@@ -108,6 +134,9 @@ export const useTaskListMessages = (params: MessageHandlerParams) => {
     setEditingTaskIds,
     editingTaskIdsRef,
     setPendingScrollTaskId,
+    setExecutionMode,
+    setModel,
+    setModels,
     handleRefreshTaskTitle,
     handleScrollToTask,
   ]);

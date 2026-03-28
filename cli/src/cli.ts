@@ -7,6 +7,8 @@ import { TodoParser } from './core/parser';
 import { FileService } from './core/services/fileService';
 import { TaskManager } from './core/managers/taskManager';
 import { TodoTask } from './core/types';
+import { SettingsService } from './core/services/settingsService';
+import { ModelService } from './core/services/modelService';
 
 interface CLIOptions {
   file?: string;
@@ -282,6 +284,131 @@ function createProgram(): Command {
       console.log(`  已完成: ${stats.completed}`);
       console.log(`  进行中: ${stats.inProgress}`);
       console.log(`  待处理: ${stats.pending}`);
+    });
+
+  // Debug command
+  const debugProgram = program
+    .command('debug')
+    .description('调试命令（用于测试功能）');
+
+  // Debug: model-list
+  debugProgram
+    .command('model-list')
+    .description('列出 OpenCode 可用模型')
+    .action(async () => {
+      const modelService = new ModelService();
+      try {
+        const models = await modelService.listModels();
+        console.log(JSON.stringify({
+          success: true,
+          count: models.length,
+          models: models
+        }, null, 2));
+      } catch (error: any) {
+        console.log(JSON.stringify({
+          success: false,
+          error: error.message
+        }, null, 2));
+        process.exit(1);
+      }
+    });
+
+  // Debug: config-get
+  debugProgram
+    .command('config-get')
+    .description('获取当前配置')
+    .option('-w, --workspace <path>', '工作区路径')
+    .action(async (options) => {
+      const workspacePath = options.workspace || process.cwd();
+      const settingsService = new SettingsService(workspacePath);
+      try {
+        const config = await settingsService.readSettings();
+        console.log(JSON.stringify({
+          success: true,
+          configPath: settingsService.getConfigPath(),
+          config: config
+        }, null, 2));
+      } catch (error: any) {
+        console.log(JSON.stringify({
+          success: false,
+          error: error.message
+        }, null, 2));
+        process.exit(1);
+      }
+    });
+
+  // Debug: config-set
+  debugProgram
+    .command('config-set <key> <value>')
+    .description('设置配置项')
+    .option('-w, --workspace <path>', '工作区路径')
+    .action(async (key: string, value: string, options) => {
+      const workspacePath = options.workspace || process.cwd();
+      const settingsService = new SettingsService(workspacePath);
+      try {
+        if (key === 'executionMode') {
+          if (value !== 'claude' && value !== 'opencode') {
+            throw new Error('executionMode must be "claude" or "opencode"');
+          }
+          await settingsService.updateExecutionMode(value);
+        } else if (key === 'model') {
+          await settingsService.updateModel(value);
+        } else {
+          throw new Error(`Unknown config key: ${key}. Supported keys: executionMode, model`);
+        }
+        const config = await settingsService.readSettings();
+        console.log(JSON.stringify({
+          success: true,
+          configPath: settingsService.getConfigPath(),
+          config: config
+        }, null, 2));
+      } catch (error: any) {
+        console.log(JSON.stringify({
+          success: false,
+          error: error.message
+        }, null, 2));
+        process.exit(1);
+      }
+    });
+
+  // Debug: execute-command
+  debugProgram
+    .command('execute-command <taskId>')
+    .description('生成任务的执行命令')
+    .option('-f, --file <path>', 'TODO 文件路径（可选，默认使用第一个找到的 TODO 文件）')
+    .action(async (taskId: string, options) => {
+      const cli = new MDTODOCLI();
+      const parentOptions = (debugProgram as any).parent?.opts() || {};
+      let filePath = options.file || parentOptions.file;
+
+      if (!filePath) {
+        try {
+          filePath = cli.resolveFilePath();
+        } catch {
+          filePath = 'unknown';
+        }
+      }
+
+      try {
+        // 生成执行命令（模拟 extension 的行为）
+        const absolutePath = path.resolve(filePath);
+        const relativePath = path.relative(process.cwd(), absolutePath).replace(/\\/g, '/');
+        const command = `claude --dangerously-skip-permissions execute "${relativePath} 中的 ${taskId} 任务"`;
+
+        console.log(JSON.stringify({
+          success: true,
+          taskId: taskId,
+          filePath: absolutePath,
+          relativePath: relativePath,
+          command: command
+        }, null, 2));
+      } catch (error: any) {
+        console.log(JSON.stringify({
+          success: false,
+          error: error.message
+        }, null, 2));
+        process.exit(1);
+      }
     });
 
   return program;

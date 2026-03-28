@@ -163,6 +163,10 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     setSettingsPanelOpen,
     executionMode,
     setExecutionMode,
+    model,
+    models,
+    setModel,
+    setModels,
     allTasks,
     incompleteCount,
     filteredTasks,
@@ -287,6 +291,9 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     setEditingTaskIds,
     editingTaskIdsRef,
     setPendingScrollTaskId,
+    setExecutionMode,
+    setModel,
+    setModels,
     handleRefreshTaskTitle,
     handleScrollToTask: operations.handleScrollToTask,
   });
@@ -309,6 +316,13 @@ const TaskList: React.FC<TaskListProps> = (props) => {
       }
     }
   }, [pendingScrollTaskId, setEditModes, setEditingTaskIds, setPendingScrollTaskId]);
+
+  // 【R54.9.6】打开设置面板时自动获取模型列表
+  React.useEffect(() => {
+    if (settingsPanelOpen && executionMode === 'opencode' && models.length === 0) {
+      sendMessage({ type: 'fetchModels' });
+    }
+  }, [settingsPanelOpen, executionMode, models.length, sendMessage]);
 
   // Context menu click/wheel handlers
   React.useEffect(() => {
@@ -376,6 +390,17 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     // 可以在这里发送消息到扩展端保存设置
     sendMessage({ type: 'executionModeChanged', mode });
   }, [setExecutionMode, setSettingsPanelOpen, sendMessage]);
+
+  // 【R54.9.6】处理模型变更
+  const handleModelChange = React.useCallback((modelId: string) => {
+    setModel(modelId);
+    sendMessage({ type: 'modelChanged', model: modelId });
+  }, [setModel, sendMessage]);
+
+  // 【R54.9.6】获取模型列表
+  const handleFetchModels = React.useCallback(() => {
+    sendMessage({ type: 'fetchModels' });
+  }, [sendMessage]);
 
   // Has active filters
   const hasActiveFilters = filterType !== 'all';
@@ -510,8 +535,12 @@ const TaskList: React.FC<TaskListProps> = (props) => {
     React.createElement(SettingsPanel, {
       isOpen: settingsPanelOpen,
       executionMode,
+      model,
+      models,
       onClose: () => setSettingsPanelOpen(false),
       onChange: handleExecutionModeChange,
+      onModelChange: handleModelChange,
+      onFetchModels: handleFetchModels,
     })
   );
 };

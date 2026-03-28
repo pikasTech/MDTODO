@@ -6,6 +6,7 @@ import { TodoTask, TodoFile, TextBlock } from '../types';
 import { FileService } from '../services/fileService';
 import { generateClaudeExecuteArgs } from '../services/claudeService';
 import { SettingsService } from '../services/settingsService';
+import { ModelService } from '../services/modelService';
 import { TyporaService } from './services/typoraService';
 import { ScrollSyncManager } from './scrollSyncManager';
 import { LinkHandler } from './linkHandler';
@@ -148,7 +149,8 @@ export class TodoWebviewProvider {
             textBlocks: this.currentTextBlocks,
             filePath: this.currentFilePath,
             workspacePath: workspacePath,
-            executionMode: config.executionMode
+            executionMode: config.executionMode,
+            model: config.model
           });
         }).catch(error => {
           console.error('[MDTODO] Failed to read execution mode:', error);
@@ -316,6 +318,7 @@ export class TodoWebviewProvider {
         break;
       case 'generateExecuteCommand':
         await this.logInteraction('commandGenerated', { taskId: message.taskId });
+        console.log('[MDTODO] Received generateExecuteCommand message with taskId:', message.taskId);
         this.handleGenerateExecuteCommand(message.taskId);
         break;
       // R54.8.1/R54.8.3: 处理来自 webview 的 console 日志和 MDTODO.log API
@@ -326,6 +329,14 @@ export class TodoWebviewProvider {
       // R54.9.5: 处理执行模式变更消息
       case 'executionModeChanged':
         await this.handleExecutionModeChanged(message.mode);
+        break;
+      // R54.9.6: 处理获取模型列表消息
+      case 'fetchModels':
+        await this.handleFetchModels();
+        break;
+      // R54.9.6: 处理模型变更消息
+      case 'modelChanged':
+        await this.handleModelChanged(message.model);
         break;
     }
   }
@@ -438,7 +449,9 @@ export class TodoWebviewProvider {
    * 生成执行命令
    */
   private handleGenerateExecuteCommand(taskId: string): void {
+    console.log('[MDTODO] handleGenerateExecuteCommand called with taskId:', taskId);
     const result = this.commandGenerator.generateExecuteCommand(taskId);
+    console.log('[MDTODO] commandGenerator returned:', result);
     if (result) {
       this.sendToWebview({
         type: 'executeCommandGenerated',
@@ -491,6 +504,54 @@ export class TodoWebviewProvider {
       });
     } catch (error) {
       console.error('[MDTODO] Failed to save execution mode:', error);
+    }
+  }
+
+  // R54.9.6: 处理模型变更
+  private async handleModelChanged(model: string): Promise<void> {
+    const workspacePath = this.getWorkspaceFolderPath();
+    if (!workspacePath) {
+      console.error('[MDTODO] No workspace path found for saving model');
+      return;
+    }
+
+    try {
+      await this.settingsService.updateModel(workspacePath, model);
+      console.log(`[MDTODO] Model saved: ${model}`);
+
+      // 发送确认消息给 webview
+      this.sendToWebview({
+        type: 'modelUpdated',
+        model: model
+      });
+    } catch (error) {
+      console.error('[MDTODO] Failed to save model:', error);
+    }
+  }
+
+  // R54.9.6: 处理获取模型列表
+  private async handleFetchModels(): Promise<void> {
+    try {
+      const modelService = new ModelService();
+      const models = await modelService.listModels();
+      console.log(`[MDTODO] Fetched ${models.length} models`);
+
+      const panel = this.panelManager.getPanel();
+      console.log(`[MDTODO] sendToWebview: panel exists: ${!!panel}`);
+      if (panel) {
+        panel.webview.postMessage({
+          type: 'modelsUpdated',
+          models: models
+        });
+        console.log(`[MDTODO] modelsUpdated message sent to webview`);
+      }
+    } catch (error: any) {
+      console.error('[MDTODO] Failed to fetch models:', error);
+      this.sendToWebview({
+        type: 'modelsUpdated',
+        models: [],
+        error: error.message
+      });
     }
   }
 

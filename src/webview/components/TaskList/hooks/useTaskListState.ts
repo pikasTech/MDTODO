@@ -69,11 +69,16 @@ export interface TaskListStateReturn {
   textBlockEditModes: Record<string, boolean>;
   setTextBlockEditModes: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   displayTitle: string;
+  setDisplayTitle: React.Dispatch<React.SetStateAction<string>>;
   // 【R54.9.2.1】设置面板状态
   settingsPanelOpen: boolean;
   setSettingsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
   executionMode: 'claude' | 'opencode';
   setExecutionMode: React.Dispatch<React.SetStateAction<'claude' | 'opencode'>>;
+  model: string;
+  setModel: React.Dispatch<React.SetStateAction<string>>;
+  models: Array<{ id: string; name: string; provider: string }>;
+  setModels: React.Dispatch<React.SetStateAction<Array<{ id: string; name: string; provider: string }>>>;
   // Computed
   allTasks: Task[];
   incompleteCount: number;
@@ -121,6 +126,8 @@ export const useTaskListState = (props: TaskListStateProps): TaskListStateReturn
   // 【R54.9.2.1】设置面板状态
   const [settingsPanelOpen, setSettingsPanelOpen] = React.useState(false);
   const [executionMode, setExecutionMode] = React.useState<'claude' | 'opencode'>('claude');
+  const [model, setModel] = React.useState<string>('');
+  const [models, setModels] = React.useState<Array<{ id: string; name: string; provider: string }>>([]);
 
   // Computed values
   const [displayTitle, setDisplayTitle] = React.useState(() => getFileName(filePath));
@@ -193,6 +200,10 @@ export const useTaskListState = (props: TaskListStateProps): TaskListStateReturn
     setSettingsPanelOpen,
     executionMode,
     setExecutionMode,
+    model,
+    setModel,
+    models,
+    setModels,
     allTasks,
     incompleteCount,
     filteredTasks,

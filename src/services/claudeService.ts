@@ -179,7 +179,9 @@ export class ClaudeService {
 
       // 【R54.3】使用命令生成函数获取参数字符串
       const taskDescription = generateClaudeExecuteArgs(todoFilePath, taskId);
-      const model = 'minimax/MiniMax-M2.5';
+      const model = workspacePath 
+        ? (await this.settingsService.getModel(workspacePath) || 'minimax/MiniMax-M2.5')
+        : 'minimax/MiniMax-M2.5';
 
       // 【R54.5.2】【R54.6.6】记录任务执行开始日志（使用统一日志系统）
       // OpenCode 使用 --prompt 参数
