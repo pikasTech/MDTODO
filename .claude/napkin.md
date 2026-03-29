@@ -12,6 +12,7 @@ VSCode extension that renders Markdown TODO files as an interactive tree view wi
 - **Config persistence**: Settings stored in `<workspace>/.vscode/mdtodo/settings.json`
 - **Message types**: snake_case strings (e.g., `taskSelected`, `markComplete`)
 - **Console logging**: Use `[MDTODO]` prefix for filtering
+- **Verify fixes with CLI**: Always use `node cli/dist/cli.js debug execute-command <taskId> -f "<file>"` to verify command generation fixes before testing in extension
 
 ---
 
@@ -44,7 +45,7 @@ node cli/dist/cli.js debug config-get -w "<workspace>"
 node cli/dist/cli.js debug config-set executionMode opencode -w "<workspace>"
 node cli/dist/cli.js debug config-set model "minimax/MiniMax-M2.5" -w "<workspace>"
 
-# Generate execute command (for testing)
+# Generate execute command (use to verify command generation BEFORE testing in extension)
 node cli/dist/cli.js debug execute-command <taskId> -f "<file>"
 ```
 

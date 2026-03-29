@@ -319,7 +319,7 @@ export class TodoWebviewProvider {
       case 'generateExecuteCommand':
         await this.logInteraction('commandGenerated', { taskId: message.taskId });
         console.log('[MDTODO] Received generateExecuteCommand message with taskId:', message.taskId);
-        this.handleGenerateExecuteCommand(message.taskId);
+        await this.handleGenerateExecuteCommand(message.taskId);
         break;
       // R54.8.1/R54.8.3: 处理来自 webview 的 console 日志和 MDTODO.log API
       case 'webviewLog':
@@ -448,9 +448,19 @@ export class TodoWebviewProvider {
   /**
    * 生成执行命令
    */
-  private handleGenerateExecuteCommand(taskId: string): void {
+  private async handleGenerateExecuteCommand(taskId: string): Promise<void> {
     console.log('[MDTODO] handleGenerateExecuteCommand called with taskId:', taskId);
-    const result = this.commandGenerator.generateExecuteCommand(taskId);
+    const workspacePath = this.getWorkspaceFolderPath();
+    const executionMode = workspacePath 
+      ? await this.settingsService.getExecutionMode(workspacePath)
+      : 'claude';
+    const model = workspacePath 
+      ? await this.settingsService.getModel(workspacePath)
+      : undefined;
+
+    console.log('[MDTODO] Execution context:', { executionMode, model, workspacePath });
+
+    const result = this.commandGenerator.generateExecuteCommand(taskId, { executionMode, model });
     console.log('[MDTODO] commandGenerator returned:', result);
     if (result) {
       this.sendToWebview({
@@ -661,6 +671,16 @@ export class TodoWebviewProvider {
         const tasks = parser.parse(content, filePath);
         const textBlocks = parser.parseTextBlocks(content);
         console.log('[MDTODO] Parsed tasks count:', tasks.length, 'textBlocks:', textBlocks.length);
+        // Debug: log first few task IDs with all children recursively
+        const logTasks = (tasks: any[], depth: number = 0) => {
+          tasks.forEach(t => {
+            console.log('[MDTODO] Task:', '  '.repeat(depth), t.id, 'line:', t.lineNumber, 'children:', t.children?.length || 0);
+            if (t.children?.length > 0) {
+              logTasks(t.children, depth + 1);
+            }
+          });
+        };
+        logTasks(tasks);
         this.currentTasks = tasks;
         this.currentTextBlocks = textBlocks;
         this.currentFilePath = filePath;

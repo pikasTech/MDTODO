@@ -374,8 +374,10 @@ function createProgram(): Command {
   // Debug: execute-command
   debugProgram
     .command('execute-command <taskId>')
-    .description('生成任务的执行命令')
-    .option('-f, --file <path>', 'TODO 文件路径（可选，默认使用第一个找到的 TODO 文件）')
+    .description('生成任务的执行命令（模拟 extension 行为）')
+    .option('-f, --file <path>', 'TODO 文件路径')
+    .option('-m, --mode <mode>', '执行模式 (claude|opencode)', 'claude')
+    .option('--model <model>', '模型 (用于 opencode 模式)')
     .action(async (taskId: string, options) => {
       const cli = new MDTODOCLI();
       const parentOptions = (debugProgram as any).parent?.opts() || {};
@@ -390,16 +392,27 @@ function createProgram(): Command {
       }
 
       try {
-        // 生成执行命令（模拟 extension 的行为）
         const absolutePath = path.resolve(filePath);
         const relativePath = path.relative(process.cwd(), absolutePath).replace(/\\/g, '/');
-        const command = `claude --dangerously-skip-permissions execute "${relativePath} 中的 ${taskId} 任务"`;
+        const executionMode = options.mode || 'claude';
+        const model = options.model;
+        const taskDescription = `execute "${relativePath} 中的 ${taskId} 任务"`;
+
+        let command: string;
+        if (executionMode === 'opencode') {
+          const modelArg = model ? ` --model ${model}` : '';
+          command = `opencode${modelArg} --prompt "${relativePath} 中的 ${taskId} 任务"`;
+        } else {
+          command = `claude --dangerously-skip-permissions ${taskDescription}`;
+        }
 
         console.log(JSON.stringify({
           success: true,
           taskId: taskId,
           filePath: absolutePath,
           relativePath: relativePath,
+          executionMode: executionMode,
+          model: model,
           command: command
         }, null, 2));
       } catch (error: any) {

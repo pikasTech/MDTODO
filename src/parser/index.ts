@@ -105,9 +105,15 @@ export class TodoParser {
     return lastDotIndex === -1 ? '' : taskId.substring(0, lastDotIndex);
   }
 
-  parse(content: string, filePath: string): TodoTask[] {
+    parse(content: string, filePath: string): TodoTask[] {
     const lines = content.split('\n');
     const tokens = this.tokenizer(content);
+    console.log('[Parser] Tokenizer produced', tokens.length, 'tokens');
+    tokens.forEach((t, i) => {
+      if (i < 20) { // Only log first 20 tokens
+        console.log('[Parser] Token', i, ':', t.type, t.content.substring(0, 40));
+      }
+    });
     const rootTasks: TodoTask[] = [];
     const stack: { task: TodoTask; id: string; depth: number }[] = [];
 
@@ -122,9 +128,19 @@ export class TodoParser {
         const parentId = this.getParentId(task.id);
         const taskDepth = this.getTaskDepth(task.id);
 
-        // 弹出栈中所有深度 >= 当前任务深度的元素
-        // 这样可以找到正确的父任务
-        while (stack.length > 0 && stack[stack.length - 1].depth >= taskDepth) {
+        // 弹出栈中所有深度 > 当前任务深度的元素
+        // 但如果当前任务的 ID 以栈顶 ID + '.' 开头，说明栈顶是父任务，不弹出
+        while (stack.length > 0) {
+          const top = stack[stack.length - 1];
+          // 如果当前任务是栈顶的子任务，停止弹出
+          if (task.id.startsWith(top.id + '.')) {
+            break;
+          }
+          // 如果栈顶深度小于当前任务深度，停止弹出（父任务）
+          if (top.depth < taskDepth) {
+            break;
+          }
+          // 否则弹出
           stack.pop();
         }
 
