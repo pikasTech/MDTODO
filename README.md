@@ -8,6 +8,13 @@ VSCODE插件，渲染TODO文件为树形任务列表，支持Claude Code集成�
 
 ![alt text](image.png)
 
+## Documentation
+
+- Top-level project index: `CLAUDE.md`
+- Stable reference docs: `docs/reference/`
+- Documentation reading guide: `docs/README.md`
+- Historical MDTODO source docs: `docs/20260120_MDTODO.md`, `docs/20260120_MDTODO2.md`, `docs/MDTODO_CLI.md`, `docs/MDTODO_CLI_USAGE.md`, `docs/MDTODO_SKILL.md`
+
 ## 功能特性
 
 - **树形任务列表**：将Markdown格式的TODO文件渲染为可展开/折叠的树形结构

@@ -11,6 +11,17 @@ export interface TaskFileManagerOptions {
   onWebviewRefresh: () => void;
 }
 
+export function generateReportTimestamp(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+}
+
 export class TaskFileManager {
   private currentFilePath: string;
   private currentTasks: TodoTask[];
@@ -40,13 +51,7 @@ export class TaskFileManager {
    */
   generateNewTaskContent(taskId: string, parentTaskId?: string): string {
     const fileName = path.basename(this.currentFilePath, '.md');
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const timestamp = `${year}${month}${day}_${hours}${minutes}`;
+    const timestamp = generateReportTimestamp();
     const reportPath = `./details/${fileName}/${timestamp}_Task_Report.md`;
 
     const headerLevel = parentTaskId ? '###' : '##';

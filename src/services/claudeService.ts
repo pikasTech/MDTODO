@@ -11,6 +11,8 @@ export interface ExecutionResult {
   error?: string;
 }
 
+export type ExecutionMode = 'claude' | 'codex' | 'opencode';
+
 /**
  * 获取当前工作区的根路径
  */
@@ -52,6 +54,17 @@ export function generateClaudeExecuteArgs(todoFilePath: string, taskId: string):
   return `execute "${relativePath} 中的 ${taskId} 任务"`;
 }
 
+export function generateCodexPrompt(todoFilePath: string, taskId: string): string {
+  const workspacePath = getWorkspaceFolderPath();
+  let relativePath = todoFilePath;
+
+  if (workspacePath) {
+    relativePath = toRelativePath(todoFilePath, workspacePath);
+  }
+
+  return `请执行 ${relativePath} 中的 ${taskId} 任务`;
+}
+
 export class ClaudeService {
   private outputChannel: vscode.OutputChannel;
   private currentProcess: ChildProcess | undefined;
@@ -79,6 +92,8 @@ export class ClaudeService {
     // 根据 executionMode 选择执行方式
     if (executionMode === 'opencode') {
       return this.executeTaskWithOpenCode(todoFilePath, taskId);
+    } else if (executionMode === 'codex') {
+      return this.executeTaskWithCodex(todoFilePath, taskId);
     } else {
       return this.executeTaskWithClaude(todoFilePath, taskId);
     }
@@ -145,6 +160,71 @@ export class ClaudeService {
       return {
         success: true,
         output: `任务 ${taskId} 已提交执行（Claude Code），请查看新打开的终端窗口`
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        output: '',
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 【R57】使用 Codex 执行任务
+   */
+  private async executeTaskWithCodex(todoFilePath: string, taskId: string): Promise<ExecutionResult> {
+    const os = platform();
+
+    this.outputChannel.show();
+    this.outputChannel.appendLine(`开始执行任务: ${taskId}`);
+    this.outputChannel.appendLine(`文件: ${todoFilePath}`);
+    this.outputChannel.appendLine('模式: Codex');
+    this.outputChannel.appendLine('---');
+
+    try {
+      const workspacePath = getWorkspaceFolderPath();
+
+      if (workspacePath) {
+        this.outputChannel.appendLine(`工作区: ${workspacePath}`);
+      } else {
+        this.outputChannel.appendLine('警告: 未找到工作区，使用绝对路径');
+      }
+
+      const prompt = generateCodexPrompt(todoFilePath, taskId);
+      const fullCommand = `codex --dangerously-bypass-approvals-and-sandbox "${prompt}"`;
+      if (workspacePath) {
+        const logsDir = getLogsDirectoryPath(workspacePath);
+        await ensureLogsDirectory(logsDir);
+        await logTaskEvent(logsDir, todoFilePath, taskId, 'taskExecute', {
+          command: fullCommand,
+          mode: 'new_terminal',
+          platform: os,
+          executor: 'codex'
+        });
+      }
+
+      const spawnOptions: any = {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      };
+
+      if (workspacePath) {
+        spawnOptions.cwd = workspacePath;
+      }
+
+      if (os === 'win32') {
+        spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', 'codex', '--dangerously-bypass-approvals-and-sandbox', prompt], spawnOptions);
+      } else if (os === 'darwin') {
+        spawn('open', ['-a', 'Terminal', '--args', 'codex', '--dangerously-bypass-approvals-and-sandbox', prompt], spawnOptions);
+      } else {
+        spawn('xterm', ['-e', 'codex', '--dangerously-bypass-approvals-and-sandbox', prompt], spawnOptions);
+      }
+
+      return {
+        success: true,
+        output: `任务 ${taskId} 已提交执行（Codex），请查看新打开的终端窗口`
       };
     } catch (error: any) {
       return {

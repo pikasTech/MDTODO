@@ -1,7 +1,7 @@
 {
   "name": "vscode-mdtodo",
   "displayName": "MDTODO",
-  "description": "VSCODE插件，渲染TODO文件为独立视图窗口，支持Claude Code集成",
+  "description": "VSCODE插件，渲染TODO文件为独立视图窗口，支持Claude Code、Codex与OpenCode集成",
   "version": "0.0.2",
   "publisher": "mdtodo",
   "repository": {
@@ -38,7 +38,7 @@
       },
       {
         "command": "mdtodo.executeTask",
-        "title": "使用Claude执行任务",
+        "title": "执行任务",
         "enablement": "true"
       },
       {

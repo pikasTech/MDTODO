@@ -410,7 +410,7 @@ function setupFileWatcher(context: vscode.ExtensionContext, logsDir: string | nu
  * 【R54.9.3.1】获取当前执行模式
  * @returns Promise that resolves to current execution mode
  */
-export async function getExecutionMode(): Promise<'claude' | 'opencode'> {
+export async function getExecutionMode(): Promise<'claude' | 'codex' | 'opencode'> {
   if (!workspacePath) {
     return 'claude';
   }
@@ -419,10 +419,10 @@ export async function getExecutionMode(): Promise<'claude' | 'opencode'> {
 
 /**
  * 【R54.9.3.1】更新执行模式
- * @param mode 新的执行模式 ('claude' | 'opencode')
+ * @param mode 新的执行模式 ('claude' | 'codex' | 'opencode')
  * @returns Promise that resolves when the mode is updated
  */
-export async function updateExecutionMode(mode: 'claude' | 'opencode'): Promise<void> {
+export async function updateExecutionMode(mode: 'claude' | 'codex' | 'opencode'): Promise<void> {
   if (!workspacePath) {
     throw new Error('Workspace path not available');
   }
@@ -433,7 +433,7 @@ export async function updateExecutionMode(mode: 'claude' | 'opencode'): Promise<
  * 【R54.9.3.1】获取完整配置
  * @returns Promise that resolves to current settings config
  */
-export async function getSettings(): Promise<{ executionMode: 'claude' | 'opencode' }> {
+export async function getSettings(): Promise<{ executionMode: 'claude' | 'codex' | 'opencode' }> {
   if (!workspacePath) {
     return { executionMode: 'claude' };
   }

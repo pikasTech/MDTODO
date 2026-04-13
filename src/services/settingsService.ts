@@ -10,7 +10,7 @@ import * as path from 'path';
  * 设置配置接口
  */
 export interface SettingsConfig {
-  executionMode: 'claude' | 'opencode';
+  executionMode: 'claude' | 'codex' | 'opencode';
   model?: string;
 }
 
@@ -18,7 +18,7 @@ export interface SettingsConfig {
  * 默认配置
  */
 const DEFAULT_CONFIG: SettingsConfig = {
-  executionMode: 'opencode',
+  executionMode: 'claude',
   model: undefined,
 };
 
@@ -124,12 +124,12 @@ export class SettingsService {
   /**
    * 更新执行模式设置
    * @param workspacePath 工作区根路径
-   * @param mode 新的执行模式 ('claude' | 'opencode')
+   * @param mode 新的执行模式 ('claude' | 'codex' | 'opencode')
    * @returns Promise that resolves when the mode is updated
    */
   async updateExecutionMode(
     workspacePath: string,
-    mode: 'claude' | 'opencode'
+    mode: 'claude' | 'codex' | 'opencode'
   ): Promise<void> {
     await this.writeSettings(workspacePath, { executionMode: mode });
   }
@@ -141,7 +141,7 @@ export class SettingsService {
    */
   async getExecutionMode(
     workspacePath: string
-  ): Promise<'claude' | 'opencode'> {
+  ): Promise<'claude' | 'codex' | 'opencode'> {
     const config = await this.readSettings(workspacePath);
     return config.executionMode;
   }

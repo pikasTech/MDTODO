@@ -1,12 +1,12 @@
 import * as path from 'path';
-import { generateClaudeExecuteArgs } from '../../services/claudeService';
+import { generateClaudeExecuteArgs, generateCodexPrompt } from '../../services/claudeService';
 
 export interface CommandGeneratorOptions {
   currentFilePath: string;
 }
 
 export interface GenerateCommandOptions {
-  executionMode: 'claude' | 'opencode';
+  executionMode: 'claude' | 'codex' | 'opencode';
   model?: string;
 }
 
@@ -49,6 +49,9 @@ export class CommandGenerator {
       const modelArg = model ? ` --model ${model}` : '';
       const prompt = this.generateOpenCodePrompt(taskId);
       command = `opencode${modelArg} --prompt "${prompt}"`;
+    } else if (executionMode === 'codex') {
+      const prompt = generateCodexPrompt(this.currentFilePath, taskId);
+      command = `codex --dangerously-bypass-approvals-and-sandbox "${prompt}"`;
     } else {
       const taskDescription = generateClaudeExecuteArgs(this.currentFilePath, taskId);
       command = `claude --dangerously-skip-permissions ${taskDescription}`;

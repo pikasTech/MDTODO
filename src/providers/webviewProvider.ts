@@ -496,7 +496,7 @@ export class TodoWebviewProvider {
   }
 
   // R54.9.5: 处理执行模式变更
-  private async handleExecutionModeChanged(mode: 'claude' | 'opencode'): Promise<void> {
+  private async handleExecutionModeChanged(mode: 'claude' | 'codex' | 'opencode'): Promise<void> {
     const workspacePath = this.getWorkspaceFolderPath();
     if (!workspacePath) {
       console.error('[MDTODO] No workspace path found for saving execution mode');

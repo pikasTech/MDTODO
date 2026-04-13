@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 // 执行模式类型
-export type ExecutionMode = 'claude' | 'opencode';
+export type ExecutionMode = 'claude' | 'codex' | 'opencode';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -177,6 +177,57 @@ const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
                 marginTop: '2px',
               }
             }, '使用 Claude Code CLI 执行任务')
+          )
+        ),
+        React.createElement('div', {
+          onClick: () => onChange('codex'),
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '10px 12px',
+            backgroundColor: executionMode === 'codex' ? 'rgba(0, 122, 204, 0.15)' : '#252526',
+            border: `1px solid ${executionMode === 'codex' ? '#007acc' : '#3c3c3c'}`,
+            borderRadius: '4px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }
+        },
+          React.createElement('div', {
+            style: {
+              width: '16px',
+              height: '16px',
+              borderRadius: '50%',
+              border: `2px solid ${executionMode === 'codex' ? '#007acc' : '#3c3c3c'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }
+          },
+            executionMode === 'codex' && React.createElement('div', {
+              style: {
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: '#007acc',
+              }
+            })
+          ),
+          React.createElement('div', null,
+            React.createElement('div', {
+              style: {
+                fontSize: '13px',
+                color: '#d4d4d4',
+                fontWeight: 500,
+              }
+            }, 'Codex'),
+            React.createElement('div', {
+              style: {
+                fontSize: '11px',
+                color: '#888',
+                marginTop: '2px',
+              }
+            }, '使用 Codex CLI 执行任务')
           )
         ),
         // OpenCode 选项

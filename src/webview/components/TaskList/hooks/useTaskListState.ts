@@ -73,8 +73,8 @@ export interface TaskListStateReturn {
   // 【R54.9.2.1】设置面板状态
   settingsPanelOpen: boolean;
   setSettingsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  executionMode: 'claude' | 'opencode';
-  setExecutionMode: React.Dispatch<React.SetStateAction<'claude' | 'opencode'>>;
+  executionMode: 'claude' | 'codex' | 'opencode';
+  setExecutionMode: React.Dispatch<React.SetStateAction<'claude' | 'codex' | 'opencode'>>;
   model: string;
   setModel: React.Dispatch<React.SetStateAction<string>>;
   models: Array<{ id: string; name: string; provider: string }>;
@@ -125,7 +125,7 @@ export const useTaskListState = (props: TaskListStateProps): TaskListStateReturn
 
   // 【R54.9.2.1】设置面板状态
   const [settingsPanelOpen, setSettingsPanelOpen] = React.useState(false);
-  const [executionMode, setExecutionMode] = React.useState<'claude' | 'opencode'>('claude');
+  const [executionMode, setExecutionMode] = React.useState<'claude' | 'codex' | 'opencode'>('claude');
   const [model, setModel] = React.useState<string>('');
   const [models, setModels] = React.useState<Array<{ id: string; name: string; provider: string }>>([]);
 

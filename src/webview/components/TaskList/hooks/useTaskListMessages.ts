@@ -12,7 +12,7 @@ export interface MessageHandlerParams {
   setEditingTaskIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   editingTaskIdsRef: React.MutableRefObject<Set<string>>;
   setPendingScrollTaskId: React.Dispatch<React.SetStateAction<string | null>>;
-  setExecutionMode?: React.Dispatch<React.SetStateAction<'claude' | 'opencode'>>;
+  setExecutionMode?: React.Dispatch<React.SetStateAction<'claude' | 'codex' | 'opencode'>>;
   setModel?: React.Dispatch<React.SetStateAction<string>>;
   setModels?: React.Dispatch<React.SetStateAction<Array<{ id: string; name: string; provider: string }>>>;
   handleRefreshTaskTitle: (taskId: string, newTitle: string) => void;

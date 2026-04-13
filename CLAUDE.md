@@ -1,87 +1,49 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Top-level index for the MDTODO repository.
 
-## Project Overview
+## Dev Commands
 
-VSCode extension that renders Markdown TODO files as an interactive tree view with Claude Code integration. Tasks use the `## R1`, `### R1.1` format (R = Requirement/Task, with optional dot notation for subtasks).
+- `npm.cmd install`: install workspace dependencies on Windows; see `docs/reference/build-and-release.md`.
+- `npm.cmd run watch`: rebuild extension and webview bundles during local development; see `docs/reference/build-and-release.md`.
+- `npm.cmd run compile`: run the full TypeScript and webpack build; see `docs/reference/build-and-release.md`.
+- `npm.cmd run test`: run the Jest test suite; see `docs/reference/build-and-release.md`.
+- `npm.cmd run package`: create the VSIX package for distribution; see `docs/reference/build-and-release.md`.
+- `install.bat`: install the extension into VS Code through the local packaging flow; see `docs/reference/build-and-release.md`.
 
-## Commands
+## VS Code Commands
 
-**注意**: Windows 下使用 `npm.cmd` 代替 `npm`
+- `mdtodo.openView`: open the preferred TODO file in the MDTODO view; see `docs/reference/extension-entrypoints.md`.
+- `mdtodo.openFile`: choose and open a TODO file manually; see `docs/reference/extension-entrypoints.md`.
+- `mdtodo.refresh`: refresh the current MDTODO panel from Markdown source; see `docs/reference/extension-entrypoints.md`.
+- `mdtodo.executeTask`: run the selected task through the configured executor; see `docs/reference/execution-modes.md`.
+- `mdtodo.openFromPreview`: open MDTODO from a Markdown preview context; see `docs/reference/extension-entrypoints.md`.
 
-```bash
-npm.cmd install          # Install dependencies
-npm.cmd run watch        # Development: watch mode with hot reload (F5 to debug)
-npm.cmd run compile      # Full build: TypeScript compilation + webpack bundling
-npm.cmd run package      # Package as .vsix for distribution
-npm.cmd run test         # Run Jest tests
-```
+## Code Entrypoints
 
-## Architecture
+- `src/extension.ts`: extension activation, command registration, provider registry, and file watching; see `docs/reference/extension-entrypoints.md`.
+- `src/providers/webviewProvider.ts`: webview lifecycle, message routing, and manager orchestration; see `docs/reference/extension-entrypoints.md`.
+- `src/providers/managers/taskFileManager.ts`: Markdown task CRUD and report-link creation; see `docs/reference/task-markdown-format.md`.
+- `src/providers/managers/commandGenerator.ts`: copyable execution command generation for each executor; see `docs/reference/execution-modes.md`.
+- `src/services/claudeService.ts`: terminal launch path for Claude, Codex, and OpenCode execution; see `docs/reference/execution-modes.md`.
+- `cli/`: standalone MDTODO command-line workflow; see `docs/reference/cli-and-skill.md`.
 
-### Extension Core (`src/extension.ts`)
-- Entry point for VSCode activation/deactivation
-- Registers commands: `mdtodo.openView`, `mdtodo.openFile`, `mdtodo.refresh`, `mdtodo.executeTask`
-- Manages a `Map<string, TodoWebviewProvider>` for multiple file support
-- Sets up file system watcher for `**/*TODO*.md` files
+## Reference Docs
 
-### Webview Provider (`src/providers/webviewProvider.ts`)
-- Main orchestrator for each webview panel
-- Initializes manager instances: `PanelManager`, `TaskFileManager`, `CommandGenerator`, `ScrollSyncManager`, `LinkHandler`, `FileRefreshManager`, `TaskStatusManager`
-- Handles message routing from webview (70+ message types)
-- Key methods: `loadFile()`, `refresh()`, `handleMessage()`
+- `docs/reference/overview.md`: project scope, deliverables, repository shape, and long-term goals.
+- `docs/reference/extension-entrypoints.md`: stable extension commands, runtime entrypoints, and architecture constraints.
+- `docs/reference/task-markdown-format.md`: `R` task format, parsed data model, status markers, and report-link rules.
+- `docs/reference/execution-modes.md`: executor selection, generated command shapes, and launch behavior.
+- `docs/reference/cli-and-skill.md`: project-specific CLI and skill relationship without duplicating generic skill docs.
+- `docs/reference/build-and-release.md`: build, test, package, and installation flow.
+- `docs/reference/process-distillation.md`: distilled map from historical process documents to current reference docs.
+- `docs/README.md`: reading order for the documentation set.
 
-### Manager Pattern (`src/providers/managers/`)
-- **PanelManager**: Webview panel lifecycle and HTML content
-- **TaskFileManager**: Task CRUD operations on markdown files
-- **CommandGenerator**: Claude CLI command generation
+## Historical Sources
 
-### Parser (`src/parser/index.ts`)
-- Tokenizes markdown into: `heading`, `task`, `text`, `empty`
-- Builds hierarchical tree from flat markdown using indentation-based stacking
-- Calculates link statistics for tasks
-- Auto-converts legacy `[Processing]`/`[Finished]` to `[in_progress]`/`[completed]`
-
-### Task Data Model (`src/types/index.ts`)
-```typescript
-interface TodoTask {
-  id: string;           // "R1", "R2.1"
-  title: string;        // Formatted for display
-  rawContent: string;   // Preserved for editing
-  completed: boolean;   // [completed] mark
-  processing: boolean;  // [in_progress] mark
-  children: TodoTask[]; // Nested subtasks
-  lineNumber: number;   // Source file line
-  linkCount: number;    // Link statistics
-  linkExists: number;   // Existing links count
-}
-```
-
-### Webview (`src/webview/`)
-- React 18 application bundle separately via webpack (`resources/bundle.js`)
-- Built with `tsconfig.webview.json` (transpileOnly: true)
-- Components: `TaskList`, `TaskItem`, `TaskBlock`, `Toolbar`, `TaskContextMenu`
-- Hooks pattern: `useTaskListState`, `useTaskOperations`, `useLinkOperations`, `useScrollHandler`
-- Communicates with extension via `vscode.postMessage` (types: `updateTasks`, `taskSelected`, `executeTask`, etc.)
-
-### Services (`src/services/`)
-- **fileService**: Find/read TODO files (`*TODO*.md` pattern)
-- **claudeService**: Execute Claude Code CLI commands
-
-## Build System
-
-Two separate webpack bundles:
-1. **Extension** (`out/extension.js`): CommonJS, excludes React/vscode
-2. **Webview** (`resources/bundle.js`): ESM bundle with React, Katex inline
-
-TypeScript configurations:
-- `tsconfig.json`: Extension code (strict mode, commonjs)
-- `tsconfig.webview.json`: React webview (transpileOnly, react-jsx)
-
-## Key Conventions
-
-- File paths use `filePath: string` (not URI) in parser/services
-- Webview providers keyed by lowercase-normalized file path
-- Console logging uses `[MDTODO]` prefix for filtering
-- Message types are snake_case strings (`taskSelected`, `markComplete`)
+- `docs/20260120_MDTODO.md`: early extension foundation and interaction track.
+- `docs/20260120_MDTODO2.md`: later extension refinement, settings, logging, and execution routing track.
+- `docs/MDTODO_CLI.md`: CLI implementation history.
+- `docs/MDTODO_CLI_USAGE.md`: user-facing CLI usage source.
+- `docs/MDTODO_SKILL.md`: skill packaging history.
+- `docs/details/`: immutable detailed reports kept as primary process records.
